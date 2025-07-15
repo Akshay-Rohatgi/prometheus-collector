@@ -2,6 +2,7 @@ import time
 from typing import List
 import classes
 import k8s
+import rich
 from pydantic import BaseModel
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
@@ -37,7 +38,7 @@ def detect_workloads(workflow: Workflow) -> dict[str, k8s.Workload]:
     k8s_client = k8s.K8sClient("/mnt/c/Users/t-arohatgi/.kube/config")
     detected_workloads = k8s.detect_workloads(k8s_client)
 
-    print(
+    rich.print(
         "=== Detected Workloads ===\n" +
         "\n".join(f"🔨 Workload: {workload.name} in namespace {workload.namespace}" for workload in detected_workloads) +
         "\n" +
@@ -142,7 +143,7 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s.Workload]:
     )
 
     # print("Detecting OSS workloads using AI agent...")
-    
+
     # Prepare workload information for the agent
     workload_info = []
     for workload in workflow.detected_workloads.values():
@@ -154,7 +155,7 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s.Workload]:
             "containers": workload.containers
         }
         workload_info.append(workload_details)
-    
+
     # Create the analysis prompt for the agent
     analysis_prompt = f"""Please analyze the following Kubernetes workloads and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.
 
@@ -170,19 +171,22 @@ Labels: {w['labels']}
 Containers: {w['containers']}
 ---
 """
-    
+
     analysis_prompt += """
 For each workload you identify as a major OSS project, use the add_oss_workload tool to add it to the detected list.
 """
-    
+
     # Run the agent
     try:
         with get_openai_callback() as callback:
             response = oss_detection_agent.invoke({"messages": [{"role": "user", "content": analysis_prompt}]})
+            rich.print(response)
 
-        print("=== AI Agent Tokens and Cost ===")
-        print(f"💵 Total tokens used: {callback.total_tokens}\n" + f"💵 Prompt tokens: {callback.prompt_tokens}\n" + f"💵 Completion tokens: {callback.completion_tokens}\n" + f"💵 Total cost: ${callback.total_cost:.6f}")
-        print("=== AI Agent Tokens and Cost ===")
+        rich.print("=== AI Agent Response ===")
+
+        rich.print("=== AI Agent Tokens and Cost ===")
+        rich.print(f"💵 Total tokens used: {callback.total_tokens}\n" + f"💵 Prompt tokens: {callback.prompt_tokens}\n" + f"💵 Completion tokens: {callback.completion_tokens}\n" + f"💵 Total cost: ${callback.total_cost:.6f}")
+        rich.print("=== AI Agent Tokens and Cost ===")
 
     except Exception as e:
         print(str(e))
@@ -193,14 +197,14 @@ For each workload you identify as a major OSS project, use the add_oss_workload 
         for workload in workflow.detected_workloads.values():
             if any(pattern in workload.name.lower() or pattern in workload.image.lower() for pattern in simple_oss_patterns):
                 detected_oss_workload_names.append(workload.name.lower())
-    
+
     # Build the detected OSS workloads dictionary
     detected_oss_workloads = {}
     for workload_name in detected_oss_workload_names:
         if workload_name in workflow.detected_workloads:
             detected_oss_workloads[workload_name] = workflow.detected_workloads[workload_name]
-    
-    print(
+
+    rich.print(
         "=== Detected OSS Workloads ===\n" +
         "\n".join(f"🔍 {name}: {workload.image}" for name, workload in detected_oss_workloads.items()) +
         "\n" +
@@ -217,7 +221,7 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s.Workload]:
         "detected_oss_workloads": list(workflow.detected_oss_workloads.keys()),
     })
 
-    print(
+    rich.print(
         "=== Selected OSS Workloads ===\n" +
         "\n".join(f"✅ {name}" for name in selected_workloads) +
         "\n" +

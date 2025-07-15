@@ -1,0 +1,45 @@
+import utils.printer as printer
+from dotenv import load_dotenv
+from api import routes
+import uvicorn
+import uuid
+
+
+def main():
+    printer.info("Welcome to LLM Powered Workload Monitoring")
+    uvicorn.run(routes.app, host="0.0.0.0", port=8000)
+
+
+def k8s():
+    from k8s.client import K8sClient, detect_workloads
+
+    k8s_client = K8sClient("/mnt/c/Users/t-arohatgi/.kube/config")
+    workloads = detect_workloads(k8s_client)
+    printer.out(workloads)
+
+
+def ai():
+    from ai.graphs import graph
+    from langgraph.types import Command
+    thread_id = str(uuid.uuid4())
+    config={"configurable": {"thread_id": thread_id}}
+    try:
+        result = graph.invoke({}, config=config)
+
+        if "__interrupt__" in result:
+            printer.out("Graph execution was interrupted.")
+            printer.out(result["__interrupt__"][0].value["detected_oss_workloads"])
+    except Exception as e:
+        printer.error(f"Graph execution failed: {str(e)}")
+        return
+    
+    input("Select workloads to monitor and press Enter to continue...")
+    graph.invoke(Command(resume=["strimzi-cluster-operator"]), config=config)
+
+    # printer.out(f"Graph result: {result}")
+
+
+if __name__ == "__main__":
+    main()
+    # k8s()
+    # ai()
