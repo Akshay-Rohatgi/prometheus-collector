@@ -14,7 +14,3 @@ class WorkflowStatus(BaseModel):
             raise ValueError(f"Phase must be one of {phases}")
         return self
 
-class Workload(BaseModel):
-    name: str
-
-

@@ -1,0 +1,11 @@
+[
+  {
+    "api_version": null,
+    "kind": null,
+    "metadata": {
+      "annotations": {
+        "deployment.kubernetes.io/revision": "1",
+        "meta.helm.sh/release-name": "azmon-kafka-exporter",
+        "meta.helm.sh/release-namespace": "azmon-kafka-exporter"
+      },
+      "creation_timestamp": 

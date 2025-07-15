@@ -1,0 +1,295 @@
+[
+  {
+    "image": "mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:investibots-2",
+    "namespace": "default",
+    "metadata_name": "investibots-deployment",
+    "metadata_labels": {
+      "app": "investibots"
+    },
+    "containers": [
+      {
+        "name": "investibots",
+        "args": null,
+        "env": null
+      }
+    ]
+  },
+  {
+    "image": "quay.io/strimzi/operator:0.46.1",
+    "namespace": "kafka",
+    "metadata_name": "my-cluster-entity-operator",
+    "metadata_labels": {
+      "app.kubernetes.io/instance": "my-cluster",
+      "app.kubernetes.io/managed-by": "strimzi-cluster-operator",
+      "app.kubernetes.io/name": "entity-operator",
+      "app.kubernetes.io/part-of": "strimzi-my-cluster",
+      "strimzi.io/cluster": "my-cluster",
+      "strimzi.io/component-type": "entity-operator",
+      "strimzi.io/kind": "Kafka",
+      "strimzi.io/name": "my-cluster-entity-operator"
+    },
+    "containers": [
+      {
+        "name": "topic-operator",
+        "args": [
+          "/opt/strimzi/bin/topic_operator_run.sh"
+        ],
+        "env": [
+          {
+            "name": "STRIMZI_RESOURCE_LABELS",
+            "value": "strimzi.io/cluster=my-cluster",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_KAFKA_BOOTSTRAP_SERVERS",
+            "value": "my-cluster-kafka-bootstrap:9091",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_NAMESPACE",
+            "value": "kafka",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_SECURITY_PROTOCOL",
+            "value": "SSL",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_TLS_ENABLED",
+            "value": "true",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_GC_LOG_ENABLED",
+            "value": "false",
+            "value_from": null
+          }
+        ]
+      },
+      {
+        "name": "user-operator",
+        "args": [
+          "/opt/strimzi/bin/user_operator_run.sh"
+        ],
+        "env": [
+          {
+            "name": "STRIMZI_KAFKA_BOOTSTRAP_SERVERS",
+            "value": "my-cluster-kafka-bootstrap:9091",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_NAMESPACE",
+            "value": "kafka",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_LABELS",
+            "value": "strimzi.io/cluster=my-cluster",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_CA_KEY_NAME",
+            "value": "my-cluster-clients-ca",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_CA_CERT_NAME",
+            "value": "my-cluster-clients-ca-cert",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_CA_NAMESPACE",
+            "value": "kafka",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_CA_VALIDITY",
+            "value": "365",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_CA_RENEWAL",
+            "value": "30",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_CLUSTER_CA_CERT_SECRET_NAME",
+            "value": "my-cluster-cluster-ca-cert",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_EO_KEY_SECRET_NAME",
+            "value": "my-cluster-entity-user-operator-certs",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_GC_LOG_ENABLED",
+            "value": "false",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_SECRET_PREFIX",
+            "value": null,
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_ACLS_ADMIN_API_SUPPORTED",
+            "value": "false",
+            "value_from": null
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "image": "quay.io/strimzi/operator:0.46.1",
+    "namespace": "kafka",
+    "metadata_name": "strimzi-cluster-operator",
+    "metadata_labels": {
+      "app": "strimzi"
+    },
+    "containers": [
+      {
+        "name": "strimzi-cluster-operator",
+        "args": [
+          "/opt/strimzi/bin/cluster_operator_run.sh"
+        ],
+        "env": [
+          {
+            "name": "STRIMZI_NAMESPACE",
+            "value": null,
+            "value_from": {
+              "config_map_key_ref": null,
+              "field_ref": {
+                "api_version": "v1",
+                "field_path": "metadata.namespace"
+              },
+              "resource_field_ref": null,
+              "secret_key_ref": null
+            }
+          },
+          {
+            "name": "STRIMZI_FULL_RECONCILIATION_INTERVAL_MS",
+            "value": "120000",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_OPERATION_TIMEOUT_MS",
+            "value": "300000",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_KAFKA_EXPORTER_IMAGE",
+            "value": "quay.io/strimzi/kafka:0.46.1-kafka-4.0.0",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_CRUISE_CONTROL_IMAGE",
+            "value": "quay.io/strimzi/kafka:0.46.1-kafka-4.0.0",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_KAFKA_IMAGES",
+            "value": "3.9.0=quay.io/strimzi/kafka:0.46.1-kafka-3.9.0\n4.0.0=quay.io/strimzi/kafka:0.46.1-kafka-4.0.0\n",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_KAFKA_CONNECT_IMAGES",
+            "value": "3.9.0=quay.io/strimzi/kafka:0.46.1-kafka-3.9.0\n4.0.0=quay.io/strimzi/kafka:0.46.1-kafka-4.0.0\n",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_KAFKA_MIRROR_MAKER_2_IMAGES",
+            "value": "3.9.0=quay.io/strimzi/kafka:0.46.1-kafka-3.9.0\n4.0.0=quay.io/strimzi/kafka:0.46.1-kafka-4.0.0\n",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_TOPIC_OPERATOR_IMAGE",
+            "value": "quay.io/strimzi/operator:0.46.1",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_USER_OPERATOR_IMAGE",
+            "value": "quay.io/strimzi/operator:0.46.1",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_KAFKA_INIT_IMAGE",
+            "value": "quay.io/strimzi/operator:0.46.1",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_KAFKA_BRIDGE_IMAGE",
+            "value": "quay.io/strimzi/kafka-bridge:0.32.0",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_KANIKO_EXECUTOR_IMAGE",
+            "value": "quay.io/strimzi/kaniko-executor:0.46.1",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_DEFAULT_MAVEN_BUILDER",
+            "value": "quay.io/strimzi/maven-builder:0.46.1",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_OPERATOR_NAMESPACE",
+            "value": null,
+            "value_from": {
+              "config_map_key_ref": null,
+              "field_ref": {
+                "api_version": "v1",
+                "field_path": "metadata.namespace"
+              },
+              "resource_field_ref": null,
+              "secret_key_ref": null
+            }
+          },
+          {
+            "name": "STRIMZI_FEATURE_GATES",
+            "value": null,
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_LEADER_ELECTION_ENABLED",
+            "value": "true",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_LEADER_ELECTION_LEASE_NAME",
+            "value": "strimzi-cluster-operator",
+            "value_from": null
+          },
+          {
+            "name": "STRIMZI_LEADER_ELECTION_LEASE_NAMESPACE",
+            "value": null,
+            "value_from": {
+              "config_map_key_ref": null,
+              "field_ref": {
+                "api_version": "v1",
+                "field_path": "metadata.namespace"
+              },
+              "resource_field_ref": null,
+              "secret_key_ref": null
+            }
+          },
+          {
+            "name": "STRIMZI_LEADER_ELECTION_IDENTITY",
+            "value": null,
+            "value_from": {
+              "config_map_key_ref": null,
+              "field_ref": {
+                "api_version": "v1",
+                "field_path": "metadata.name"
+              },
+              "resource_field_ref": null,
+              "secret_key_ref": null
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
