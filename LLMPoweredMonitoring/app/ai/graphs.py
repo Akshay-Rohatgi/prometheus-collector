@@ -182,7 +182,7 @@ def generate_monitoring_deployment_plan(workflow: Workflow,) -> dict[str, Monito
         printer.info(f"Generating monitoring deployment plan for {workload_name}...")
         # printer.banner(f"Generating monitoring deployment plan for {workload_name}...")
 
-        mplan = MonitoringPlan(human_readable="This is a placeholder for the actual monitoring deployment plan."
+        mplan = MonitoringPlan(human_readable="This is a placeholder for the actual monitoring deployment plan.")
 
         # Placeholder for the actual deployment plan generation logic
         # printer.out(mplan.human_readable)
