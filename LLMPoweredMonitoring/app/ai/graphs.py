@@ -1,4 +1,4 @@
-import k8s.client
+from k8s import client as k8s_client
 from . import tools
 from . import models
 from . import prompts
@@ -14,16 +14,17 @@ from langchain_community.callbacks import get_openai_callback
 class Workflow(BaseModel):
     thread_id: str = None
 
-    detected_workloads: dict[str, k8s.client.Workload] = None
-    detected_oss_workloads: dict[str, k8s.client.Workload] = None
-    selected_oss_workloads: dict[str, k8s.client.Workload] = None
+    detected_workloads: dict[str, k8s_client.Workload] = None
+    detected_oss_workloads: dict[str, k8s_client.Workload] = None
+    selected_oss_workloads: dict[str, k8s_client.Workload] = None
 
-def detect_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
+    verified_oss_workloads: dict[str, k8s_client.Workload] = None
+
+def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
 
-
-    k8s_client = k8s.client.K8sClient("/mnt/c/Users/t-arohatgi/.kube/config")
-    detected_workloads = k8s.client.detect_workloads(k8s_client)
+    client = k8s_client.K8sClient("/mnt/c/Users/t-arohatgi/.kube/config")
+    detected_workloads = k8s_client.detect_workloads(client)
 
     printer.banner("Detected Workloads")
     printer.out(
@@ -37,7 +38,10 @@ def detect_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
     }
 
 
-def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
+def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
+    """
+    Detect OSS workloads using an AI agent based on the detected workloads.
+    """
     detected_oss_workload_names = []  # Reset the global list
     
     # temporary function to add OSS workload names
@@ -69,7 +73,7 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
     try:
         with get_openai_callback() as callback:
             _ = oss_detection_agent.invoke({"messages": [{"role": "user", "content": analysis_prompt}]})
-            # printer.out(response)
+            # printer.out(r)
 
 
         printer.banner("AI Agent Tokens and Cost")
@@ -84,7 +88,8 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
     for workload_name in detected_oss_workload_names:
         if workload_name in workflow.detected_workloads:
             detected_oss_workloads[workload_name] = workflow.detected_workloads[workload_name]
-
+    
+    printer.out(detected_oss_workloads)
     printer.banner("Detected OSS Workloads")
     printer.out(
         "\n".join(f"🔍 {name}: {workload.image}" for name, workload in detected_oss_workloads.items())  )
@@ -94,7 +99,10 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
         "detected_oss_workloads": detected_oss_workloads
     }
 
-def select_oss_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
+def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
+    """
+    User selects which OSS workloads to monitor from the detected OSS workloads.
+    """
     selected_workloads = interrupt({
         "detected_oss_workloads": list(workflow.detected_oss_workloads.keys()),
     })
@@ -115,16 +123,42 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s.client.Workload]:
         "selected_oss_workloads": selected_oss_workloads
     }
 
+def verify_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
+    """
+    Verify that the selected OSS workload are not already being monitored
+    """
+    client = k8s_client.K8sClient("/mnt/c/Users/t-arohatgi/.kube/config")
+
+    verified_workloads = {}
+
+    # This is a placeholder for the actual verification logic
+    # k8s_client.verify_workloads(client, workflow.selected_oss_workloads)
+
+    verified_workloads = workflow.selected_oss_workloads.copy()
+
+    return {
+        "verified_oss_workloads": verified_workloads,
+    }
+
+def generate_monitoring_deployment_plan(workflow: Workflow):
+    pass
+
+
 def build_graph() -> StateGraph:
     builder = StateGraph(Workflow)
     builder.add_node("detect_workloads", detect_workloads)
     builder.add_node("detect_oss_workloads", detect_oss_workloads)
     builder.add_node("select_oss_workloads", select_oss_workloads)
+    builder.add_node("verify_workloads", verify_workloads)
+
+
+
 
     builder.add_edge(START, "detect_workloads")
     builder.add_edge("detect_workloads", "detect_oss_workloads")
     builder.add_edge("detect_oss_workloads", "select_oss_workloads")
-    builder.add_edge("select_oss_workloads", END)
+    builder.add_edge("select_oss_workloads", "verify_workloads")
+    builder.add_edge("verify_workloads", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)

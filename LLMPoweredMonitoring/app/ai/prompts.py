@@ -65,6 +65,6 @@ OSS_DETECTION_PROMPT = """You are an expert Kubernetes and open-source software 
     DECISION PROCESS:
     For each workload, provide your analysis and confidence level. Only invoke the add_oss_workload tool for workloads you have HIGH confidence are major, first-class OSS projects.
 
-    When you find a workload that meets the criteria, call add_oss_workload(workload_name) to add it to the detected list.
+    When you find a workload that meets the criteria, call add_oss_workload(workload_name) to add it to the detected list. Remember to use the "workload_name" provided as the name of the workload, not the image or namespace.
 
     Remember: Quality over quantity. It's better to miss a few edge cases than to include workloads that don't truly benefit from monitoring or aren't significant OSS projects.""" 

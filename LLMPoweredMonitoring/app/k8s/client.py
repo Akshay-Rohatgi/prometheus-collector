@@ -8,7 +8,7 @@ class Workload(BaseModel):
     image: str
     namespace: str
     metadata_name: str
-    metadata_labels: Dict[str, str]
+    metadata_labels: Optional[Dict[str, str]] = None  # Labels might not exist
     containers: List[Dict[str, Any]]  # Changed from List[Dict[str, List[str]]]
     
     # Optional fields for future extension
@@ -26,6 +26,7 @@ class K8sClient:
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1Api()
         self.batch_api = client.BatchV1Api()
+        self.custom_objects_api = client.CustomObjectsApi()
 
 
 def filter_deployments(deployments: List[Dict]) -> List[Dict]:
@@ -52,12 +53,15 @@ def create_workloads(deployments: List[Dict]) -> List[Workload]:
     """Create workloads directly from deployment data"""
     workloads = []
     for deployment in deployments:
+
+        # handle case where labels might not exist
+        labels = deployment.get("metadata", {}).get("labels")
         workload = Workload(
             name=deployment["metadata"]["name"],
             image=deployment["spec"]["template"]["spec"]["containers"][0]["image"],
             namespace=deployment["metadata"]["namespace"],
             metadata_name=deployment["metadata"]["name"],
-            metadata_labels=deployment["metadata"]["labels"],
+            metadata_labels=labels,  # Now handles None case
             containers=[
                 {
                     "name": container["name"],
@@ -69,7 +73,7 @@ def create_workloads(deployments: List[Dict]) -> List[Workload]:
         )
         workloads.append(workload)
     return workloads
-    
+
 
 def detect_workloads(k8s_client: K8sClient) -> List[Workload]:
     from . import tools
@@ -93,6 +97,12 @@ def detect_workloads(k8s_client: K8sClient) -> List[Workload]:
     workloads = create_workloads(filtered_deployments)
     
     return workloads
+
+def verify_workloads(k8s_client: K8sClient, workloads: List[Workload]):
+    from . import tools
+    printer.out(tools.get_ama_metric_pod_names(k8s_client))
+    for pod_name in tools.get_ama_metric_pod_names(k8s_client):
+        printer.out(tools.get_prometheus_targets_api(k8s_client, pod_name))
 
 if __name__ == "__main__":
     # Example usage

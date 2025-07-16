@@ -1,6 +1,7 @@
 from typing import List, Dict
-from .client import K8sClient
+from .client import K8sClient, Workload
 from utils import printer
+import re
 
 def get_namespaces(k8s_client: K8sClient) -> List[Dict]:
     namespaces = k8s_client.core_api.list_namespace()
@@ -73,3 +74,53 @@ def filter_deployments_by_blacklist(deployments: List[Dict], deployment_blacklis
         candidates.append(deployment)
         
     return candidates
+
+def get_pods_in_namespace(k8s_client: K8sClient, namespace: str) -> List[Dict]:
+    """
+    Get all pods in a specific namespace.
+    """
+    pods = k8s_client.core_api.list_namespaced_pod(namespace)
+    return [pod.to_dict() for pod in pods.items]
+
+def get_ama_metric_pod_names(k8s_client: K8sClient, namespace: str = "kube-system") -> List[str]:
+    """
+    Get pod names that are related to Azure Monitor Agent (AMA) metrics.
+    """
+    # ama metric pods look like: ama-metrics-<10-digit-hex>-<5-digit-hex>
+    ama_metric_pod_names = []
+    pods = get_pods_in_namespace(k8s_client, namespace)
+    for pod in pods:
+        # print(pod["metadata"]["name"])
+        pod_name = pod["metadata"]["name"]
+        # Match pattern: ama-metrics-<10 hex>-<5 hex>
+        if re.fullmatch(r"ama-metrics-([0-9]|[a-z]|[A-Z]){10}-([0-9]|[a-z]|[A-Z]){5}", pod_name):
+            printer.out(f"✅ Found AMA metric pod: {pod_name}")
+            ama_metric_pod_names.append(pod_name)
+        else:
+            printer.out(f"❌ Skipping pod {pod_name} as it does not match AMA metrics naming convention")
+
+    return ama_metric_pod_names
+
+
+def get_prometheus_targets_api(k8s_client: K8sClient, pod_name: str, namespace: str = "kube-system", port: int = 9090) -> Dict:
+    """
+    Alternative approach using the Kubernetes API client directly.
+
+    WARNING: INCOMPLETE - This is a placeholder for the actual implementation.
+    """
+    try:
+        # Use the connect_get_namespaced_pod_proxy method
+        pod_name = "ama-metrics-operator-targets-678d8c777-7n9th"
+        response = k8s_client.core_api.connect_get_namespaced_pod_proxy(
+            name=pod_name + ":" + "8080" +"/targets",
+            namespace=namespace,
+            path="/",
+        )
+
+
+        # The response should be the targets data
+        return response
+        
+    except Exception as e:
+        printer.error(f"Failed to get Prometheus targets via API: {str(e)}")
+        return None

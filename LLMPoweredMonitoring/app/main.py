@@ -11,11 +11,10 @@ def main():
 
 
 def k8s():
-    from k8s.client import K8sClient, detect_workloads
-
+    from k8s.client import K8sClient, detect_workloads, verify_workloads
     k8s_client = K8sClient("/mnt/c/Users/t-arohatgi/.kube/config")
     workloads = detect_workloads(k8s_client)
-    printer.out(workloads)
+    verify_workloads(k8s_client, workloads)
 
 
 def ai():

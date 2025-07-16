@@ -22,7 +22,7 @@ WORKLOADS TO ANALYZE:
     
     for w in workload_info:
         analysis_prompt += f"""
-Workload: {w['name']}
+workload_name: {w['name']}
 Image: {w['image']}
 Namespace: {w['namespace']}
 Labels: {w['labels']}
@@ -31,7 +31,7 @@ Containers: {w['containers']}
 """
 
     analysis_prompt += """
-For each workload you identify as a major OSS project, use the add_oss_workload tool to add it to the detected list.
+For each workload you identify as a major OSS project (HIGH confidence), use the add_oss_workload tool to add it to the detected list.
 """
 
     return analysis_prompt
