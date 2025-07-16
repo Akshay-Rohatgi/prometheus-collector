@@ -3,6 +3,7 @@ from core import workflow
 from pydantic import BaseModel
 from langgraph.types import Command
 from fastapi import FastAPI, HTTPException
+from utils import printer
 
 app = FastAPI()
 workflow_status = workflow.WorkflowStatus(
@@ -12,6 +13,9 @@ workflow_status = workflow.WorkflowStatus(
 
 class selectOssWorkloadsRequest(BaseModel):
     selected_workloads: list[str]
+
+class generateMonitoringPlanRequest(BaseModel):
+    generate: bool = True
 
 @app.get("/")
 def read_root():
@@ -70,3 +74,25 @@ def select_oss_workloads(request: selectOssWorkloadsRequest):
         return {"message": "Selected OSS workloads successfully", "selected_oss_workloads": selected_workloads_names}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error selecting OSS workloads: {str(e)}")
+
+@app.post("/generate_monitoring_plan")
+def generate_monitoring_plan(request: generateMonitoringPlanRequest):
+    # If recievies a "True" resume the workflow
+    if not workflow_status.active:
+        raise HTTPException(status_code=400, detail="No active workflow to generate monitoring plan")
+    
+    if request.generate:
+        try:
+            result = graph.invoke(
+                Command(resume=True),
+                config=workflow_status.config
+            )
+
+            if "__interrupt__" in result:
+                return {"message": "Monitoring deployment plan generated successfully", "monitoring_plans": result["__interrupt__"][0].value["monitoring_plans"]}
+            else:
+                raise HTTPException(status_code=500, detail="Workflow did not return an interrupt")
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error generating monitoring plan: {str(e)}")
+

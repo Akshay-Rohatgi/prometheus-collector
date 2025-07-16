@@ -11,6 +11,9 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_community.callbacks import get_openai_callback
 
+class MonitoringPlan(BaseModel):
+    human_readable: str = None
+
 class Workflow(BaseModel):
     thread_id: str = None
 
@@ -19,6 +22,8 @@ class Workflow(BaseModel):
     selected_oss_workloads: dict[str, k8s_client.Workload] = None
 
     verified_oss_workloads: dict[str, k8s_client.Workload] = None
+
+    monitoring_plans: dict[str, MonitoringPlan] = None
 
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
@@ -89,7 +94,6 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
         if workload_name in workflow.detected_workloads:
             detected_oss_workloads[workload_name] = workflow.detected_workloads[workload_name]
     
-    printer.out(detected_oss_workloads)
     printer.banner("Detected OSS Workloads")
     printer.out(
         "\n".join(f"🔍 {name}: {workload.image}" for name, workload in detected_oss_workloads.items())  )
@@ -141,7 +145,64 @@ def verify_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     }
 
 def generate_monitoring_deployment_plan(workflow: Workflow):
-    pass
+    begin_approval = interrupt({
+        "message": "Do you want to generate a monitoring deployment plan for the selected OSS workloads?",
+        "options": ["yes", "no"]
+    })
+
+    if not begin_approval:
+        return {
+            "message": "Monitoring deployment plan generation cancelled by user."
+        }
+
+    monitoring_plans = {}
+
+    for workload_name, workload in workflow.verified_oss_workloads.items():
+        printer.info(f"Generating monitoring deployment plan for {workload_name}...")
+        # printer.banner(f"Generating monitoring deployment plan for {workload_name}...")
+
+        mplan = MonitoringPlan(
+            human_readable="This is a placeholder for the actual monitoring deployment plan."
+        )
+
+        mplan.human_readable = f"""T
+The process for generating a monitoring deployment plan for {workload_name} is:
+
+Run this kubectl command:
+```
+kubectl create deployment {workload_name}-monitoring --image=monitoring-image --namespace={workload.namespace} --replicas=1
+```
+
+Check with this kubectl command:
+```
+kubectl get deployments -n {workload.namespace}
+```
+
+"""
+
+        # Placeholder for the actual deployment plan generation logic
+        # printer.out(mplan.human_readable)
+
+        monitoring_plans[workload_name] = mplan
+
+    return {
+        "monitoring_plans": monitoring_plans
+    }
+
+def approve_monitoring_deployment_plan(workflow: Workflow) -> bool:
+    """
+    Approve the generated monitoring deployment plan.
+    """
+    approval = interrupt({
+        "monitoring_plans": workflow.monitoring_plans,
+    })
+
+    if approval == "yes":
+        printer.success("Monitoring deployment plan approved.")
+        return True
+    else:
+        printer.success("Monitoring deployment plan not approved.")
+        return False
 
 
 def build_graph() -> StateGraph:
@@ -150,15 +211,16 @@ def build_graph() -> StateGraph:
     builder.add_node("detect_oss_workloads", detect_oss_workloads)
     builder.add_node("select_oss_workloads", select_oss_workloads)
     builder.add_node("verify_workloads", verify_workloads)
-
-
-
+    builder.add_node("generate_monitoring_deployment_plan", generate_monitoring_deployment_plan)
+    builder.add_node("approve_monitoring_deployment_plan", approve_monitoring_deployment_plan)
 
     builder.add_edge(START, "detect_workloads")
     builder.add_edge("detect_workloads", "detect_oss_workloads")
     builder.add_edge("detect_oss_workloads", "select_oss_workloads")
     builder.add_edge("select_oss_workloads", "verify_workloads")
-    builder.add_edge("verify_workloads", END)
+    builder.add_edge("verify_workloads", "generate_monitoring_deployment_plan")
+    builder.add_edge("generate_monitoring_deployment_plan", "approve_monitoring_deployment_plan")
+    builder.add_edge("approve_monitoring_deployment_plan", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
