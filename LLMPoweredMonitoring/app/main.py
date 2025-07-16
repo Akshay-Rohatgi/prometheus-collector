@@ -26,19 +26,28 @@ def ai():
         result = graph.invoke({}, config=config)
 
         if "__interrupt__" in result:
-            printer.out("Graph execution was interrupted.")
-            printer.out(result["__interrupt__"][0].value["detected_oss_workloads"])
+            # printer.out("Graph execution was interrupted.")
+            # printer.out(result["__interrupt__"][0].value["detected_oss_workloads"])
+            pass
     except Exception as e:
         printer.error(f"Graph execution failed: {str(e)}")
         return
     
     input("Select workloads to monitor and press Enter to continue...")
-    graph.invoke(Command(resume=["strimzi-cluster-operator"]), config=config)
+    graph.invoke(Command(resume=["nginx-deployment"]), config=config)
+
+    move_on = input("Would you like to generate a monitoring deployment plan? (yes/no): ").strip().lower()
+    if move_on == "yes" or len(move_on) == 0:
+        result = graph.invoke(Command(resume=True), config=config)
+        printer.out("Monitoring deployment plan generated.")
+        printer.out(result)
+    else:
+        _ = graph.invoke(Command(resume=False), config=config)
 
     # printer.out(f"Graph result: {result}")
 
 
 if __name__ == "__main__":
     main()
-    # k8s()
-    # ai()
+    #k8s()
+    #ai()

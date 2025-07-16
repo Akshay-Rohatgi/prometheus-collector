@@ -11,8 +11,10 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_community.callbacks import get_openai_callback
 
+
 class MonitoringPlan(BaseModel):
     human_readable: str = None
+
 
 class Workflow(BaseModel):
     thread_id: str = None
@@ -22,8 +24,11 @@ class Workflow(BaseModel):
     selected_oss_workloads: dict[str, k8s_client.Workload] = None
 
     verified_oss_workloads: dict[str, k8s_client.Workload] = None
+    confirmed_to_plan: bool = None
 
+    monitoring_plan_approval: bool = None
     monitoring_plans: dict[str, MonitoringPlan] = None
+
 
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
@@ -33,14 +38,18 @@ def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
 
     printer.banner("Detected Workloads")
     printer.out(
-        "\n".join(f"🔨 Workload: {workload.name} in namespace {workload.namespace}" for workload in detected_workloads)    )
+        "\n".join(
+            f"🔨 Workload: {workload.name} in namespace {workload.namespace}"
+            for workload in detected_workloads
+        )
+    )
     printer.banner("Detected Workloads")
 
-    detected_workloads_dict = {workload.name.lower(): workload for workload in detected_workloads}
-
-    return {
-        "detected_workloads": detected_workloads_dict
+    detected_workloads_dict = {
+        workload.name.lower(): workload for workload in detected_workloads
     }
+
+    return {"detected_workloads": detected_workloads_dict}
 
 
 def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
@@ -48,14 +57,14 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     Detect OSS workloads using an AI agent based on the detected workloads.
     """
     detected_oss_workload_names = []  # Reset the global list
-    
+
     # temporary function to add OSS workload names
     def add_oss_workload(workload_name: str) -> str:
         """Add a workload name to the detected OSS workloads list.
-        
+
         Args:
             workload_name: The name of the workload to add to the OSS workloads list
-            
+
         Returns:
             Confirmation message
         """
@@ -66,23 +75,29 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     oss_detection_agent = create_react_agent(
         models.llm_4o_mini,
         tools=[add_oss_workload],
-        prompt=prompts.OSS_DETECTION_PROMPT)
+        prompt=prompts.OSS_DETECTION_PROMPT,
+    )
 
     # Prepare workload information for the agent
     workload_info = tools.generate_workload_info(workflow.detected_workloads)
-
     # Create the analysis prompt for the agent
     analysis_prompt = tools.generate_workload_detection_analysis_prompt(workload_info)
 
     # Run the agent
     try:
         with get_openai_callback() as callback:
-            _ = oss_detection_agent.invoke({"messages": [{"role": "user", "content": analysis_prompt}]})
+            _ = oss_detection_agent.invoke(
+                {"messages": [{"role": "user", "content": analysis_prompt}]}
+            )
             # printer.out(r)
 
-
         printer.banner("AI Agent Tokens and Cost")
-        printer.out(f"💵 Total tokens used: {callback.total_tokens}\n" + f"💵 Prompt tokens: {callback.prompt_tokens}\n" + f"💵 Completion tokens: {callback.completion_tokens}\n" + f"💵 Total cost: ${callback.total_cost:.6f}")
+        printer.out(
+            f"💵 Total tokens used: {callback.total_tokens}\n"
+            + f"💵 Prompt tokens: {callback.prompt_tokens}\n"
+            + f"💵 Completion tokens: {callback.completion_tokens}\n"
+            + f"💵 Total cost: ${callback.total_cost:.6f}"
+        )
         printer.banner("AI Agent Tokens and Cost")
 
     except Exception as e:
@@ -92,40 +107,45 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     detected_oss_workloads = {}
     for workload_name in detected_oss_workload_names:
         if workload_name in workflow.detected_workloads:
-            detected_oss_workloads[workload_name] = workflow.detected_workloads[workload_name]
-    
+            detected_oss_workloads[workload_name] = workflow.detected_workloads[
+                workload_name
+            ]
+
     printer.banner("Detected OSS Workloads")
     printer.out(
-        "\n".join(f"🔍 {name}: {workload.image}" for name, workload in detected_oss_workloads.items())  )
+        "\n".join(
+            f"🔍 {name}: {workload.image}"
+            for name, workload in detected_oss_workloads.items()
+        )
+    )
     printer.banner("Detected OSS Workloads")
 
-    return {
-        "detected_oss_workloads": detected_oss_workloads
-    }
+    return {"detected_oss_workloads": detected_oss_workloads}
+
 
 def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """
     User selects which OSS workloads to monitor from the detected OSS workloads.
     """
-    selected_workloads = interrupt({
-        "detected_oss_workloads": list(workflow.detected_oss_workloads.keys()),
-    })
+    selected_workloads = interrupt(
+        {
+            "detected_oss_workloads": list(workflow.detected_oss_workloads.keys()),
+        }
+    )
 
     printer.banner("Selected OSS Workloads")
-    printer.out(
-        "\n".join(f"✅ {name}" for name in selected_workloads)
-    )
+    printer.out("\n".join(f"✅ {name}" for name in selected_workloads))
     printer.banner("Selected OSS Workloads")
 
     if selected_workloads:
         selected_oss_workloads = {
-            name: workload for name, workload in workflow.detected_oss_workloads.items()
+            name: workload
+            for name, workload in workflow.detected_oss_workloads.items()
             if name in selected_workloads
         }
 
-    return {
-        "selected_oss_workloads": selected_oss_workloads
-    }
+    return {"selected_oss_workloads": selected_oss_workloads}
+
 
 def verify_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """
@@ -144,86 +164,85 @@ def verify_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
         "verified_oss_workloads": verified_workloads,
     }
 
-def generate_monitoring_deployment_plan(workflow: Workflow):
+
+def confirmation_before_planning(workflow: Workflow):
     begin_approval = interrupt({
-        "message": "Do you want to generate a monitoring deployment plan for the selected OSS workloads?",
-        "options": ["yes", "no"]
-    })
+        "message": "Do you want to generate a monitoring deployment plan for the selected OSS workloads?",})
 
-    if not begin_approval:
-        return {
-            "message": "Monitoring deployment plan generation cancelled by user."
-        }
+    if begin_approval: printer.info("Confirmed to generate monitoring deployment plan.")
+    else: printer.info("Not confirmed to generate monitoring deployment plan.")
 
+    return {"confirmed_to_plan": begin_approval}
+
+
+def generate_monitoring_deployment_plan(workflow: Workflow,) -> dict[str, MonitoringPlan]:
     monitoring_plans = {}
 
     for workload_name, workload in workflow.verified_oss_workloads.items():
         printer.info(f"Generating monitoring deployment plan for {workload_name}...")
         # printer.banner(f"Generating monitoring deployment plan for {workload_name}...")
 
-        mplan = MonitoringPlan(
-            human_readable="This is a placeholder for the actual monitoring deployment plan."
-        )
-
-        mplan.human_readable = f"""T
-The process for generating a monitoring deployment plan for {workload_name} is:
-
-Run this kubectl command:
-```
-kubectl create deployment {workload_name}-monitoring --image=monitoring-image --namespace={workload.namespace} --replicas=1
-```
-
-Check with this kubectl command:
-```
-kubectl get deployments -n {workload.namespace}
-```
-
-"""
+        mplan = MonitoringPlan(human_readable="This is a placeholder for the actual monitoring deployment plan."
 
         # Placeholder for the actual deployment plan generation logic
         # printer.out(mplan.human_readable)
 
         monitoring_plans[workload_name] = mplan
 
-    return {
-        "monitoring_plans": monitoring_plans
-    }
+    return {"monitoring_plans": monitoring_plans}
+
 
 def approve_monitoring_deployment_plan(workflow: Workflow) -> bool:
     """
     Approve the generated monitoring deployment plan.
     """
-    approval = interrupt({
-        "monitoring_plans": workflow.monitoring_plans,
-    })
+    approval = interrupt({"monitoring_plans": workflow.monitoring_plans,})
 
-    if approval == "yes":
-        printer.success("Monitoring deployment plan approved.")
-        return True
-    else:
-        printer.success("Monitoring deployment plan not approved.")
+    if approval: printer.success("Monitoring deployment plan approved.")
+    else: printer.warning("Monitoring deployment plan not approved.")
+
+    return {"monitoring_plan_approval": approval}
+
+
+def route_before_planning(workflow: Workflow) -> True:
+    if workflow.confirmed_to_plan is None:
         return False
-
+    return workflow.confirmed_to_plan
 
 def build_graph() -> StateGraph:
     builder = StateGraph(Workflow)
+
+    # NODES
     builder.add_node("detect_workloads", detect_workloads)
     builder.add_node("detect_oss_workloads", detect_oss_workloads)
     builder.add_node("select_oss_workloads", select_oss_workloads)
     builder.add_node("verify_workloads", verify_workloads)
+    builder.add_node("confirmation_before_planning", confirmation_before_planning)
     builder.add_node("generate_monitoring_deployment_plan", generate_monitoring_deployment_plan)
     builder.add_node("approve_monitoring_deployment_plan", approve_monitoring_deployment_plan)
 
+    # EDGES
+    # Pod Scanning and Workflow Identification Phase
+    # START -> detect_workloads -> detect_oss_workloads -> select_oss_workloads -> verify_workloads
     builder.add_edge(START, "detect_workloads")
     builder.add_edge("detect_workloads", "detect_oss_workloads")
     builder.add_edge("detect_oss_workloads", "select_oss_workloads")
     builder.add_edge("select_oss_workloads", "verify_workloads")
-    builder.add_edge("verify_workloads", "generate_monitoring_deployment_plan")
+
+    # Intermediary phase between workload detection and planning - opportunity to exit workflow
+    builder.add_edge("verify_workloads", "confirmation_before_planning")
+    builder.add_conditional_edges(
+        "confirmation_before_planning",
+        route_before_planning,
+        {True: "generate_monitoring_deployment_plan", False: END},
+    )
+
     builder.add_edge("generate_monitoring_deployment_plan", "approve_monitoring_deployment_plan")
     builder.add_edge("approve_monitoring_deployment_plan", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
     return graph
+
 
 graph = build_graph()

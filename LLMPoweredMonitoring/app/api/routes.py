@@ -11,12 +11,6 @@ workflow_status = workflow.WorkflowStatus(
     phase="not-started",
 )
 
-class selectOssWorkloadsRequest(BaseModel):
-    selected_workloads: list[str]
-
-class generateMonitoringPlanRequest(BaseModel):
-    generate: bool = True
-
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the LLM Powered Workload Monitoring API"}
@@ -25,7 +19,7 @@ def read_root():
 def get_workflow_status():
     return workflow_status
 
-
+# =========================================================
 @app.get("/start")
 def start_workflow():
     import uuid
@@ -55,6 +49,10 @@ def start_workflow():
     except HTTPException as e:
         raise HTTPException(status_code=500, detail=f"Error starting workflow: {str(e)}")
 
+# =========================================================
+
+class selectOssWorkloadsRequest(BaseModel):
+    selected_workloads: list[str]
 
 @app.post("/select_oss_workloads")
 def select_oss_workloads(request: selectOssWorkloadsRequest):
@@ -75,6 +73,11 @@ def select_oss_workloads(request: selectOssWorkloadsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error selecting OSS workloads: {str(e)}")
 
+# =========================================================
+
+class generateMonitoringPlanRequest(BaseModel):
+    generate: bool = None
+
 @app.post("/generate_monitoring_plan")
 def generate_monitoring_plan(request: generateMonitoringPlanRequest):
     # If recievies a "True" resume the workflow
@@ -84,7 +87,7 @@ def generate_monitoring_plan(request: generateMonitoringPlanRequest):
     if request.generate:
         try:
             result = graph.invoke(
-                Command(resume=True),
+                Command(resume=True), # this resumes at "generate_monitoring_deployment_plan"
                 config=workflow_status.config
             )
 
@@ -94,5 +97,43 @@ def generate_monitoring_plan(request: generateMonitoringPlanRequest):
                 raise HTTPException(status_code=500, detail="Workflow did not return an interrupt")
 
         except Exception as e:
+            _ = graph.invoke(Command(resume=False), config=workflow_status.config)
             raise HTTPException(status_code=500, detail=f"Error generating monitoring plan: {str(e)}")
+    else:
+        _ = graph.invoke(Command(resume=False), config=workflow_status.config)
+        return {"message": "Monitoring deployment plan generation skipped"}
 
+# =========================================================
+
+class approveMonitoringPlanRequest(BaseModel):
+    approval: bool
+
+@app.post("/approve_monitoring_plan")
+def approve_monitoring_plan(request: approveMonitoringPlanRequest):
+    if not workflow_status.active:
+        raise HTTPException(status_code=400, detail="No active workflow to approve monitoring plan")
+
+    if request.approval:
+        try:
+            graph.invoke(
+                Command(resume=request.approval), 
+                config=workflow_status.config
+            )
+
+            return {"message": "Monitoring deployment plan approved successfully"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error approving monitoring plan: {str(e)}")
+    else:
+        _ = graph.invoke(Command(resume=False), config=workflow_status.config)
+        return {"message": "Monitoring deployment plan not approved, workflow stopped"}
+
+# =========================================================
+
+@app.get("/reset")
+def reset_workflow():
+    global workflow_status
+    workflow_status = workflow.WorkflowStatus(
+        active=False,
+        phase="not-started",
+    )
+    return {"message": "Workflow reset successfully"}
