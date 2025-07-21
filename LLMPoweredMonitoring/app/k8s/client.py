@@ -27,7 +27,7 @@ class Workload(BaseModel):
     service_type: str # e.g., "ClusterIP", "NodePort", "LoadBalancer"
     service_ports: List[Dict[str, Any]]  # List of ports for the service
     service_annotations: Optional[Dict[str, str]] = None  # Annotations for the service
-    
+
     # Optional fields for future extension
     # workload_type: Optional[str] = "deployment"  # could be "statefulset", "daemonset", etc.
     is_oss: Optional[bool] = None
