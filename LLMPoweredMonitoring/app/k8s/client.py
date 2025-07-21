@@ -1,18 +1,35 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from kubernetes import client, config
-from utils import printer
+from printer import printer
+
+# class Workload(BaseModel):
+#     name: str
+#     image: str
+#     namespace: str
+#     metadata_name: str
+#     metadata_labels: Optional[Dict[str, str]] = None  # Labels might not exist
+#     containers: List[Dict[str, Any]]  # Changed from List[Dict[str, List[str]]]
+    
+#     # Optional fields for future extension
+#     workload_type: Optional[str] = "deployment"  # could be "statefulset", "daemonset", etc.
+#     is_oss: Optional[bool] = None
+#     monitoring_config: Optional[Dict] = None
 
 class Workload(BaseModel):
+    '''
+    Represents a Kubernetes workload (service).
+    '''
     name: str
-    image: str
     namespace: str
     metadata_name: str
     metadata_labels: Optional[Dict[str, str]] = None  # Labels might not exist
-    containers: List[Dict[str, Any]]  # Changed from List[Dict[str, List[str]]]
+    service_type: str # e.g., "ClusterIP", "NodePort", "LoadBalancer"
+    service_ports: List[Dict[str, Any]]  # List of ports for the service
+    service_annotations: Optional[Dict[str, str]] = None  # Annotations for the service
     
     # Optional fields for future extension
-    workload_type: Optional[str] = "deployment"  # could be "statefulset", "daemonset", etc.
+    # workload_type: Optional[str] = "deployment"  # could be "statefulset", "daemonset", etc.
     is_oss: Optional[bool] = None
     monitoring_config: Optional[Dict] = None
 
@@ -49,7 +66,24 @@ def filter_deployments(deployments: List[Dict]) -> List[Dict]:
 
     return deployments
 
-def create_workloads(deployments: List[Dict]) -> List[Workload]:
+def filter_services(services: List[Dict]) -> List[Dict]:
+    from . import tools
+    from .filters import DEPLOYMENT_BLACKLIST, NAMESPACE_BLACKLIST
+    """
+    This function is responsible for filtering out irrelevant services
+    1. It uses a blacklist of known non-OSS services that will never be relevant
+    2. It deterministically filters out services by explicitly checking to see if they are managed by Azure or Microsoft
+    """
+    # step 1: blacklist filtering
+    services = tools.filter_services_by_blacklist(services, DEPLOYMENT_BLACKLIST, NAMESPACE_BLACKLIST)
+
+    # step 2: deterministic filtering
+    # print(services)
+    # services = self.deterministic_filtering(services)
+
+    return services
+
+def create_workloads_for_deployments(deployments: List[Dict]) -> List[Workload]:
     """Create workloads directly from deployment data"""
     workloads = []
     for deployment in deployments:
@@ -74,6 +108,35 @@ def create_workloads(deployments: List[Dict]) -> List[Workload]:
         workloads.append(workload)
     return workloads
 
+def create_workloads(services: List[Dict]) -> List[Workload]:
+    """Create workloads directly from service data"""
+    workloads = []
+    for service in services:
+        metadata = service.get("metadata", {})
+        spec = service.get("spec", {})
+
+        ports = []
+        for port in spec.get("ports", []):
+            port_info = {
+                "name": port.get("name"),
+                "port": port.get("port"),
+                "target_port": port.get("targetPort"),
+                "protocol": port.get("protocol", "TCP") 
+            }
+            ports.append(port_info)
+
+        workload = Workload(
+            name=metadata.get("name", ""),
+            namespace=metadata.get("namespace", ""),
+            metadata_name=metadata.get("name", ""),
+            metadata_labels=metadata.get("labels", {}),
+            service_type=spec.get("type", "ClusterIP"),
+            service_ports=ports,
+            service_annotations=metadata.get("annotations"),
+        )
+        workloads.append(workload)
+
+    return workloads
 
 def detect_workloads(k8s_client: K8sClient) -> List[Workload]:
     from . import tools
@@ -82,19 +145,21 @@ def detect_workloads(k8s_client: K8sClient) -> List[Workload]:
     This function retrieves all deployments and creates Workload objects.
     """
     namespaces = tools.get_relevant_namespaces(k8s_client)
-    deployments = tools.get_deployments(k8s_client, namespaces)
+    # deployments = tools.get_deployments(k8s_client, namespaces)
+    services = tools.get_services(k8s_client, namespaces)
+    # printer.out(services)
 
-    if not deployments:
-        printer.info("No deployments found in relevant namespaces.")
+    if not services:
+        printer.out("No services found in the cluster.")
         return []
 
-    filtered_deployments = filter_deployments(deployments)
+    filtered_services = filter_services(services)
 
-    if not filtered_deployments:
-        printer.info("No relevant deployments found after filtering.")
+    if not filtered_services:
+        printer.out("No relevant services found after filtering.")
         return []
 
-    workloads = create_workloads(filtered_deployments)
+    workloads = create_workloads(filtered_services)
     
     return workloads
 

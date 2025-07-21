@@ -1,32 +1,20 @@
 import k8s.client
 
-def generate_workload_info(detected_workloads: dict[str, k8s.client.Workload]) -> list[dict]:
-    workload_info = []
-    for workload in detected_workloads.values():
-        workload_details = {
-            "name": workload.name,
-            "image": workload.image,
-            "namespace": workload.namespace,
-            "labels": workload.metadata_labels,
-            "containers": workload.containers
-        }
-        workload_info.append(workload_details)
-
-    return workload_info
-
-def generate_workload_detection_analysis_prompt(workload_info: list[dict]) -> str:
-    analysis_prompt = f"""Please analyze the following Kubernetes workloads and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.
+def generate_workload_detection_analysis_prompt(workloads: dict[str, k8s.client.Workload]) -> str:
+    analysis_prompt = """Please analyze the following Kubernetes workloads (services) and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.
 
 WORKLOADS TO ANALYZE:
 """
     
-    for w in workload_info:
+    for workload in workloads.values():
         analysis_prompt += f"""
-workload_name: {w['name']}
-Image: {w['image']}
-Namespace: {w['namespace']}
-Labels: {w['labels']}
-Containers: {w['containers']}
+workload_name: {workload.name}
+Namespace: {workload.namespace}
+Metadata Name: {workload.metadata_name}
+Labels: {workload.metadata_labels}
+Service Type: {workload.service_type}
+Service Ports: {workload.service_ports}
+Service Annotations: {workload.service_annotations}
 ---
 """
 
@@ -35,3 +23,22 @@ For each workload you identify as a major OSS project (HIGH confidence), use the
 """
 
     return analysis_prompt
+
+def generate_monitoring_plan_prompt(workload: k8s.client.Workload) -> str:
+    workload_info = f"""
+    Workload Information (Service):
+    - Name: {workload.name}
+    - Namespace: {workload.namespace}
+    - Metadata Name: {workload.metadata_name}
+    - Labels: {workload.metadata_labels}
+    - Service Type: {workload.service_type}
+    - Service Ports: {workload.service_ports}
+    - Service Annotations: {workload.service_annotations}
+    - Is OSS: {workload.is_oss}
+    """
+
+    return f"""Please generate a comprehensive monitoring deployment plan for the following workload as per your instructions:
+
+    {workload_info}
+    """
+

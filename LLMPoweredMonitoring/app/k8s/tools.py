@@ -1,6 +1,6 @@
 from typing import List, Dict
 from .client import K8sClient, Workload
-from utils import printer
+from printer import printer
 import re
 
 def get_namespaces(k8s_client: K8sClient) -> List[Dict]:
@@ -52,6 +52,36 @@ def get_deployments(k8s_client: K8sClient, namespaces: List[str]) -> List[Dict]:
         namespace_deployments = k8s_client.apps_api.list_namespaced_deployment(namespace)
         deployments.extend([deployment.to_dict() for deployment in namespace_deployments.items])
     return deployments
+
+def get_services(k8s_client: K8sClient, namespaces: List[str]) -> List[Dict]:
+    services = []
+    for namespace in namespaces:
+        namespace_services = k8s_client.core_api.list_namespaced_service(namespace)
+        services.extend([service.to_dict() for service in namespace_services.items])
+    return services
+
+
+def filter_services_by_blacklist(service: List[Dict], deployment_blacklist: set, namespace_blacklist: set) -> List[Dict]:
+    """
+    Filter out services that are in the blacklist.
+    """
+    candidates = []
+    
+    for svc in service:
+        name = svc["metadata"]["name"].lower()
+        namespace = svc["metadata"]["namespace"].lower()
+        
+        # skip blacklisted namespaces
+        if namespace in namespace_blacklist:
+            continue
+            
+        # skip if name contains any blacklisted terms
+        if any(blacklisted in name for blacklisted in deployment_blacklist):
+            continue
+
+        candidates.append(svc)
+        
+    return candidates
 
 def filter_deployments_by_blacklist(deployments: List[Dict], deployment_blacklist: set, namespace_blacklist: set) -> List[Dict]:
     """

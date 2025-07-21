@@ -1,6 +1,11 @@
 import requests
 import rich
 
+from rich.console import Console
+from rich.markdown import Markdown
+
+console = Console()
+
 BASE_URL = "http://localhost:8000"
 
 _ = requests.get(f"{BASE_URL}/reset")
@@ -33,7 +38,9 @@ move_on = input("Would you like to generate a monitoring deployment plan? (yes/n
 if move_on == "yes" or len(move_on) == 0:
     response = requests.post(f"{BASE_URL}/generate_monitoring_plan", json={"generate": True})
     client_print(f"Monitoring deployment plan response")
-    client_print(response.json())
+    for name, plan in dict(response.json())['monitoring_plans'].items():
+        client_print(f"Plan for {name}")
+        console.print(Markdown(plan['markdown_plan']))
 else:
     exit(0)
 

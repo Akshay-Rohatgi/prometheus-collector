@@ -3,7 +3,7 @@ from core import workflow
 from pydantic import BaseModel
 from langgraph.types import Command
 from fastapi import FastAPI, HTTPException
-from utils import printer
+from printer import printer
 
 app = FastAPI()
 workflow_status = workflow.WorkflowStatus(
