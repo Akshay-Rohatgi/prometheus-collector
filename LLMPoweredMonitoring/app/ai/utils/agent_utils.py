@@ -45,12 +45,12 @@ class AgentManager:
             return None, 0.0
 
     @staticmethod
-    def get_agent_response_content(response: Dict[str, Any], index: int = 1) -> Optional[str]:
+    def get_agent_response_content(response: Dict[str, Any], index: int = -1) -> Optional[str]:
         """Extract content from an agent response.
 
         Args:
             response: The response dictionary from the agent
-            index: The index of the message to extract (default: 1)
+            index: The index of the message to extract (default: -1 for last message)
 
         Returns:
             The content of the message at the specified index, or None if not found

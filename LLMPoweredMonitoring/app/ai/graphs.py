@@ -1,6 +1,6 @@
 from k8s import client as k8s_client
 from . import tools, models, prompts
-from .utils import print_utils, agent_utils, workload_utils
+from .utils import print_utils, agent_utils, workload_utils, gh_utils
 from .config import K8S_CONFIG_PATH, MAX_EVALUATION_ROUNDS, OSS_WORKLOAD_EMOJI
 from printer import printer
 from typing import Dict, Optional
@@ -130,8 +130,39 @@ def confirmation_before_planning(workflow: Workflow) -> dict[str, bool]:
 def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, MonitoringPlan]:
     """Generate a monitoring deployment plan using an AI agent."""
     monitoring_plans = {}
-    workload_name, workload = workload_utils.get_first_workload(workflow.verified_oss_workloads)
     
+    # Check if we have verified workloads
+    if not workflow.verified_oss_workloads or len(workflow.verified_oss_workloads) == 0:
+        printer.error("No verified OSS workloads found to generate monitoring plans for.")
+        return {"monitoring_plans": {}}
+    
+    workload_name, workload = workload_utils.get_first_workload(workflow.verified_oss_workloads)
+
+    # Tool for getting chart.yaml version number
+    def get_chart_yaml_version(exporter_name: str) -> str:
+        """Get the latest version from Chart.yaml for a prometheus exporter."""
+        try:
+            # Get GitHub client and repo
+            github_client = gh_utils.get_github_client()
+            repo = gh_utils.get_repo(github_client, "prometheus-community/helm-charts")
+            
+            # Get Chart.yaml content from the exporter directory
+            chart_dir = f"charts/prometheus-{exporter_name}-exporter"
+            try:
+                directory_content = gh_utils.get_directory_content(repo, chart_dir)
+                chart_content = gh_utils.get_file_content_from_directory(repo, directory_content, "Chart.yaml")
+                
+                # Parse the YAML to extract version
+                import yaml
+                chart_data = yaml.safe_load(chart_content)
+                version = chart_data.get('version', 'Version not found')
+                
+                return f"Latest version for prometheus-{exporter_name}-exporter: {version}"
+            except Exception as e:
+                return f"Could not find chart for prometheus-{exporter_name}-exporter: {str(e)}"
+        except Exception as e:
+            return f"Error accessing GitHub repository: {str(e)}"
+
     # Determine if this is an improvement iteration
     is_improvement = (workflow.monitoring_plan_feedback is not None and workflow.monitoring_plan_feedback.round_count > 0)
 
@@ -167,16 +198,24 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Run the optimizer agent
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        agent_prompt=prompts.MONITORING_PLAN_OPTIMIZER_PROMPT
+        tools=[get_chart_yaml_version],
+        agent_prompt=prompts.NEW_MONITORING_PLAN_GENERATION_PROMPT
     )
     
     if response:
         response_content = agent_utils.AgentManager.get_agent_response_content(response)
         if response_content:
             monitoring_plans[workload_name] = MonitoringPlan(markdown_plan=response_content)
+            printer.success(f"Generated monitoring plan for {workload_name}")
+        else:
+            printer.warning("Agent response was empty, generating fallback plan")
+            monitoring_plans[workload_name] = MonitoringPlan(
+                markdown_plan="# Fallback Monitoring Plan\n\nAgent failed to generate response content. Please try regenerating the plan."
+            )
     else:
+        printer.error("Agent failed to respond, generating fallback plan")
         monitoring_plans[workload_name] = MonitoringPlan(
-            markdown_plan="Fallback monitoring plan due to agent failure"
+            markdown_plan="# Fallback Monitoring Plan\n\nAgent failed to generate a response. Please check the agent configuration and try again."
         )
 
     return {"monitoring_plans": monitoring_plans}
@@ -195,6 +234,13 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
         return {"monitoring_plan_feedback": feedback}
     
     printer.info(f"Evaluating monitoring deployment plan (Round {feedback.round_count}/{MAX_EVALUATION_ROUNDS})...")
+    
+    # Check if monitoring plans exist
+    if not workflow.monitoring_plans or len(workflow.monitoring_plans) == 0:
+        printer.error("No monitoring plans found to evaluate. Setting feedback as failed.")
+        feedback.critic_approved = False
+        feedback.feedback_text = "No monitoring plans were generated. Please regenerate the monitoring plan."
+        return {"monitoring_plan_feedback": feedback}
     
     # Get the first monitoring plan
     workload_name, monitoring_plan = workload_utils.get_first_workload(workflow.monitoring_plans)

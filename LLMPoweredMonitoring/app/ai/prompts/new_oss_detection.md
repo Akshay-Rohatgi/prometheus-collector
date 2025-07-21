@@ -40,7 +40,7 @@ Follow these steps systematically for each service:
     * Discovery annotations (strimzi.io/discovery)
 - Identify operator-managed workloads (positive for OSS)
 
-4. **PORT AND PROTOCOL ANALYSIS** (Tertiary Signal):
+4. **PORT AND PROTOCOL ANALYSIS** (Strong Signal):
 - Look for well-known OSS service ports:
     * Kafka: 9092, 9093, 9091
     * RabbitMQ: 5672 (AMQP), 15672 (management), 15692 (prometheus)
@@ -73,8 +73,6 @@ EXCLUSION CRITERIA:
 
 FOCUS ON CORE SERVICES:
 You are looking for the main service endpoints of OSS applications, not their supporting infrastructure. For example:
-- ✅ "kafka-cluster" or "my-kafka" (core Kafka service)
-- ❌ "kafka-bootstrap" or "kafka-brokers" (supporting services)
 - ✅ "rabbitmq" or "hey-city" (if labels indicate RabbitMQ)
 - ❌ "rabbitmq-exporter" (monitoring exporter)
 - ✅ "elasticsearch-master" (core Elasticsearch service)
