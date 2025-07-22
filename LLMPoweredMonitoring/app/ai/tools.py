@@ -1,4 +1,75 @@
 import k8s.client
+from .utils import gh_utils
+
+def _flatten_dict(data: dict, parent_key: str = '', separator: str = '.') -> dict:
+    """Flatten a nested dictionary using dot notation."""
+    items = []
+    for key, value in data.items():
+        new_key = f"{parent_key}{separator}{key}" if parent_key else key
+        if isinstance(value, dict):
+            items.extend(_flatten_dict(value, new_key, separator).items())
+        elif isinstance(value, list):
+            # For lists, we'll just convert to string representation
+            items.append((new_key, str(value)))
+        else:
+            items.append((new_key, value))
+    return dict(items)
+
+def get_chart_yaml_version(exporter_name: str) -> str:
+    """Get the latest version from Chart.yaml for a prometheus exporter."""
+    try:
+        # Get GitHub client and repo
+        github_client = gh_utils.get_github_client()
+        repo = gh_utils.get_repo(github_client, "prometheus-community/helm-charts")
+        
+        # Get Chart.yaml content from the exporter directory
+        chart_dir = f"charts/prometheus-{exporter_name}-exporter"
+        try:
+            directory_content = gh_utils.get_directory_content(repo, chart_dir)
+            chart_content = gh_utils.get_file_content_from_directory(repo, directory_content, "Chart.yaml")
+            
+            # Parse the YAML to extract version
+            import yaml
+            chart_data = yaml.safe_load(chart_content)
+            version = chart_data.get('version', 'Version not found')
+            
+            return f"Latest version for prometheus-{exporter_name}-exporter: {version}"
+        except Exception as e:
+            return f"Could not find chart for prometheus-{exporter_name}-exporter: {str(e)}"
+    except Exception as e:
+        return f"Error accessing GitHub repository: {str(e)}"
+
+def get_values_yaml_formatted(exporter_name: str) -> dict:
+    """Get the flattened key-value pairs from values.yaml for a prometheus exporter."""
+    try:
+        # Get GitHub client and repo
+        github_client = gh_utils.get_github_client()
+        repo = gh_utils.get_repo(github_client, "prometheus-community/helm-charts")
+        
+        # Get values.yaml content from the exporter directory
+        chart_dir = f"charts/prometheus-{exporter_name}-exporter"
+        try:
+            directory_content = gh_utils.get_directory_content(repo, chart_dir)
+            values_content = gh_utils.get_file_content_from_directory(repo, directory_content, "values.yaml")
+
+            # Parse YAML and flatten to dot notation
+            import yaml
+            values_data = yaml.safe_load(values_content)
+            flattened_values = _flatten_dict(values_data)
+            
+            return flattened_values
+        except Exception as e:
+            return {"error": f"Could not find values.yaml for prometheus-{exporter_name}-exporter: {str(e)}"}
+    except Exception as e:
+        return {"error": f"Error accessing GitHub repository: {str(e)}"}
+
+def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
+    """Create the add_oss_workload tool function."""
+    def add_oss_workload(workload_name: str) -> str:
+        """Add a workload name to the detected OSS workloads list."""
+        detected_oss_workload_names.append(workload_name.lower())
+        return f"Added {workload_name} to the detected OSS workloads list"
+    return add_oss_workload
 
 def generate_workload_detection_analysis_prompt(workloads: dict[str, k8s.client.Workload]) -> str:
     analysis_prompt = """Please analyze the following Kubernetes workloads (services) and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.
@@ -41,4 +112,3 @@ def generate_monitoring_plan_prompt(workload: k8s.client.Workload) -> str:
 
     {workload_info}
     """
-

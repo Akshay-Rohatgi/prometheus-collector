@@ -45,7 +45,7 @@ class AgentManager:
             return None, 0.0
 
     @staticmethod
-    def get_agent_response_content(response: Dict[str, Any], index: int = -1) -> Optional[str]:
+    def get_agent_response_content(response: Dict[str, Any], index: int = -1, debug: bool = False) -> Optional[str]:
         """Extract content from an agent response.
 
         Args:
@@ -56,6 +56,10 @@ class AgentManager:
             The content of the message at the specified index, or None if not found
         """
         try:
+            if debug:
+                for response in response["messages"]:
+                    printer.info(f"Agent response: {response.content}")
+            
             return response["messages"][index].content
         except (KeyError, IndexError):
             return None

@@ -13,10 +13,11 @@ You are to develop a monitoring configuratin plan for the service provided on Az
 - The AKS cluster is already onboarded with Azure Managed Prometheus and has the necessary permissions to deploy monitoring components.
 
 # Available Tools:
-You have access to the following tool to get accurate helm chart information:
+You have access to the following tools to get accurate helm chart information:
 - **get_chart_yaml_version(exporter_name)**: Gets the latest version from Chart.yaml for a prometheus exporter. Pass the base service name (e.g., "kafka", "redis", "nginx") and it will look up the corresponding prometheus-{name}-exporter chart.
+- **get_values_yaml_formatted(exporter_name)**: Gets the flattened key-value pairs from values.yaml for a prometheus exporter. Returns a dictionary with dot notation keys (e.g., "serviceMonitor.enabled": true) containing all configurable parameters.
 
-ALWAYS use this tool to get the current chart version instead of guessing or using outdated examples.
+ALWAYS use these tools to get the current chart version and available configuration options instead of guessing or using outdated examples. Use the values tool to identify the exact parameter names and avoid setting unnecessary values.
 
 # Sample Structure and Instructions For the Monitoring Deployment Plan:
 
@@ -30,6 +31,7 @@ helm install azmon-kafka-exporter --namespace=azmon-kafka-exporter --create-name
     - Remember to always enable any service or pod monitoring that is available for the workload you are working with. This is important to ensure that the workload is properly monitored by Azure Managed Prometheus.
     - It is also important to always set the apiVersion to azmonitoring.coreos.com/v1, as this is required for Azure Managed Prometheus to work properly with the service monitors and pod monitors that are created by the exporters.
     - You can find more information about the specific chart and how to set its values in its values.yaml file.
+    - **ALWAYS** use the get_values_yaml_formatted() tool to examine the available configuration parameters for the specific exporter you are working with. This tool will return a flattened dictionary of all configurable values with dot notation keys, helping you identify the exact parameter names and avoid unnecessary configurations.
     - When looking up the values.yaml file, you should look for the following parameters:
         - For example the "server" parameter. The parameter name will take different forms based on the specific exporter you are working with. For example Kafka it is kafkaServer as seen in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-nginx-exporter/values.yaml or for RabbitMQ it is rabbitmq.uri as seen in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-rabbitmq-exporter/values.yaml. You have to dynamically determine the parameter name based on the specific exporter you are working with.
         - For the serviceMonitor and podMonitor enablement, you also have to dynamically determine the parameters based on the specific exporter you are working with. For example, for Kafka it is prometheus.serviceMonitor.enabled, while for postgres it is serviceMonitor.enabled. You can find the specific parameters in the values.yaml file for the specific exporter you are working with. For example in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-postgres-exporter/values.yaml you can see that serviceMonitor is a top-level parameter, while in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-kafka-exporter/values.yaml it is under prometheus.serviceMonitor. You have to dynamically determine the parameter name based on the specific exporter you are working with.
@@ -39,8 +41,15 @@ helm install azmon-kafka-exporter --namespace=azmon-kafka-exporter --create-name
           **WARNING**: The postgres exporter requires a username and password to be set in the values.yaml file. You should set these values in the values.yaml file before deploying the exporter. The username and password should be set in the `postgresql.username` and `postgresql.password` parameters in the values.yaml file. You can find more information about the specific chart and how to set its values in its values.yaml file.
         - Avoid generating a plan that requires the user to pass a file into the --values parameter of the helm install command. Instead, you should always use the --set parameter to set the values directly in the command. This is important to ensure that the plan is easy to use and does not require the user to create a file.
         - **ALWAYS** use the get_chart_yaml_version() tool to get the latest version for the helm chart instead of guessing or using outdated examples. For example, call get_chart_yaml_version("kafka") to get the latest version of the prometheus-kafka-exporter chart.
+        - **ALWAYS** use the get_values_yaml_formatted() tool to examine the exact configuration parameters available for the exporter. This will help you identify the correct parameter names for server connections, authentication, and monitoring enablement without guessing or including unnecessary values.
+        - Remember to discuss any prerequisites or additional steps that may be required for the exporter to work properly. For example, if the exporter requires a specific configuration or setup, you should include that in the plan. For exapmple, if the exporter requires a specific configuration file or change in the deployment, you should include that in the plan. 
+
 2. If the exporter does not automatically create a service monitor, you should create one manually. You can find more information about how to create a service monitor in the Azure Monitor documentation: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd.
 
-## 2. Configure Service Monitor
+## 2. Configure Service Monitor (optional)
+* Some things to note about the above step:
+    - This is an optional step that you should do if the previous step does not automatically create a service monitor for the workload. If the exporter does not create a service monitor, you should create one manually. You can find more information about how to create a service monitor in the Azure Monitor documentation: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd.
+    - Remember to configure the service monitor to scrape the metrics from the service you are monitoring. This is important to ensure that the metrics are collected and sent to Azure Managed Prometheus.
 
-> INFO: You may need to add pod annotations to the workload to enable monitoring. This is often required for the service monitors to work properly. You can find more information about how to add pod annotations in the Azure Monitor documentation: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd#pod-annotations.
+## 3. Add Pod Annotations (optional)
+- If the above methods do not automatically create a service monitor, you may need to add pod annotations to the workload to enable monitoring. This is often required for the service monitors to work properly. You can find more information about how to add pod annotations in the Azure Monitor documentation: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd#pod-annotations.
