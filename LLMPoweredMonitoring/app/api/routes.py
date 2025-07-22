@@ -69,7 +69,7 @@ def select_oss_workloads(request: selectOssWorkloadsRequest):
             config=workflow_status.config
         )
 
-        return {"message": "Selected OSS workloads successfully", "selected_oss_workloads": selected_workloads_names}
+        return {"message": "Selected OSS workload successfully", "selected_oss_workload": selected_workloads_names}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error selecting OSS workloads: {str(e)}")
 
@@ -92,7 +92,7 @@ def generate_monitoring_plan(request: generateMonitoringPlanRequest):
             )
 
             if "__interrupt__" in result:
-                return {"message": "Monitoring deployment plan generated successfully", "monitoring_plans": result["__interrupt__"][0].value["monitoring_plans"]}
+                return {"message": "Monitoring deployment plan generated successfully", "monitoring_plan": result["__interrupt__"][0].value["monitoring_plan"]}
             else:
                 raise HTTPException(status_code=500, detail="Workflow did not return an interrupt")
 
@@ -115,12 +115,20 @@ def approve_monitoring_plan(request: approveMonitoringPlanRequest):
 
     if request.approval:
         try:
-            graph.invoke(
+            result = graph.invoke(
                 Command(resume=request.approval), 
                 config=workflow_status.config
             )
 
-            return {"message": "Monitoring deployment plan approved successfully"}
+            printer.success("Monitoring deployment plan approved successfully")
+            # printer.info(type(result) + str(result))
+
+            return {
+                "message": "Monitoring deployment plan approved successfully",
+                "monitoring_plan": result.get("monitoring_plan"),
+                "status": "approved"
+            }
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error approving monitoring plan: {str(e)}")
     else:

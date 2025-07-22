@@ -8,6 +8,6 @@ llm_4o_mini = AzureChatOpenAI(
 )
 
 llm_41 = AzureChatOpenAI(
-    azure_deployment="gpt-4.1",
+    azure_deployment="gpt-4o",
     api_version="2024-12-01-preview",
 )

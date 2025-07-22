@@ -13,6 +13,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 class MonitoringPlan(BaseModel):
     markdown_plan: str = None
+    structured_plan: list[tuple[str, str]] = None
 
 class MonitoringFeedback(BaseModel):
     round_count: int = 0
@@ -24,14 +25,14 @@ class Workflow(BaseModel):
 
     detected_workloads: dict[str, k8s_client.Workload] = None
     detected_oss_workloads: dict[str, k8s_client.Workload] = None
-    selected_oss_workloads: dict[str, k8s_client.Workload] = None
+    selected_oss_workload: k8s_client.Workload = None
 
-    verified_oss_workloads: dict[str, k8s_client.Workload] = None
+    verified_oss_workload: k8s_client.Workload = None
     confirmed_to_plan: bool = None
 
     monitoring_plan_approval: bool = None
     monitoring_plan_feedback: MonitoringFeedback = None
-    monitoring_plans: dict[str, MonitoringPlan] = None
+    monitoring_plan: MonitoringPlan = None
 
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
@@ -81,41 +82,42 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
 
 
 def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
-    """User selects which OSS workloads to monitor from the detected OSS workloads."""
-    selected_workloads = interrupt(
+    """User selects which OSS workload to monitor from the detected OSS workloads."""
+    selected_workload_name = interrupt(
         {"detected_oss_workloads": list(workflow.detected_oss_workloads.keys())}
     )
 
-    if not selected_workloads:
-        return {"selected_oss_workloads": {}}
+    if not selected_workload_name:
+        return {"selected_oss_workload": None}
 
-    selected_oss_workloads = workload_utils.filter_workloads(
-        workflow.detected_oss_workloads, 
-        selected_workloads
-    )
-    print_utils.print_workload_list(
-        "Selected OSS Workloads",
-        selected_oss_workloads,
-        "✅"
-    )
+    # Since we're selecting only one workload, get the first one from the list
+    if isinstance(selected_workload_name, list) and len(selected_workload_name) > 0:
+        selected_workload_name = selected_workload_name[0]
+    
+    selected_oss_workload = workflow.detected_oss_workloads.get(selected_workload_name)
+    
+    if selected_oss_workload:
+        printer.success(f"✅ Selected OSS Workload: {selected_oss_workload.name}")
+    else:
+        printer.warning("No valid workload selected")
 
-    return {"selected_oss_workloads": selected_oss_workloads}
+    return {"selected_oss_workload": selected_oss_workload}
 
 
 def verify_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
-    """Verify that the selected OSS workloads are not already being monitored."""
+    """Verify that the selected OSS workload is not already being monitored."""
     client = k8s_client.K8sClient(K8S_CONFIG_PATH)
 
     # This is a placeholder for the actual verification logic
-    # k8s_client.verify_workloads(client, workflow.selected_oss_workloads)
-    verified_workloads = workflow.selected_oss_workloads.copy()
+    # k8s_client.verify_workloads(client, workflow.selected_oss_workload)
+    verified_workload = workflow.selected_oss_workload
 
-    return {"verified_oss_workloads": verified_workloads}
+    return {"verified_oss_workload": verified_workload}
 
 
 def confirmation_before_planning(workflow: Workflow) -> dict[str, bool]:
     """Request confirmation to proceed with monitoring deployment plan generation."""
-    begin_approval = interrupt({"message": "Do you want to generate a monitoring deployment plan for the selected OSS workloads?"})
+    begin_approval = interrupt({"message": "Do you want to generate a monitoring deployment plan for the selected OSS workload?"})
 
     status = "Confirmed" if begin_approval else "Not confirmed"
     printer.info(f"{status} to generate monitoring deployment plan.")
@@ -125,14 +127,13 @@ def confirmation_before_planning(workflow: Workflow) -> dict[str, bool]:
 
 def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, MonitoringPlan]:
     """Generate a monitoring deployment plan using an AI agent."""
-    monitoring_plans = {}
     
-    # Check if we have verified workloads
-    if not workflow.verified_oss_workloads or len(workflow.verified_oss_workloads) == 0:
-        printer.error("No verified OSS workloads found to generate monitoring plans for.")
-        return {"monitoring_plans": {}}
+    # Check if we have a verified workload
+    if not workflow.verified_oss_workload:
+        printer.error("No verified OSS workload found to generate monitoring plan for.")
+        return {"monitoring_plan": None}
     
-    workload_name, workload = workload_utils.get_first_workload(workflow.verified_oss_workloads)
+    workload = workflow.verified_oss_workload
 
     # Determine if this is an improvement iteration
     is_improvement = (workflow.monitoring_plan_feedback is not None and workflow.monitoring_plan_feedback.round_count > 0)
@@ -145,7 +146,7 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
 
     # Prepare the analysis prompt based on whether this is an improvement iteration
     if is_improvement:
-        previous_plan = workflow.monitoring_plans.get(workload_name)
+        previous_plan = workflow.monitoring_plan
         if not previous_plan: previous_plan = MonitoringPlan(markdown_plan="No previous plan found.")
         previous_feedback = workflow.monitoring_plan_feedback.feedback_text
         
@@ -177,20 +178,20 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     if response:
         response_content = agent_utils.AgentManager.get_agent_response_content(response)
         if response_content:
-            monitoring_plans[workload_name] = MonitoringPlan(markdown_plan=response_content)
-            printer.success(f"Generated monitoring plan for {workload_name}")
+            monitoring_plan = MonitoringPlan(markdown_plan=response_content)
+            printer.success(f"Generated monitoring plan for {workload.name}")
         else:
             printer.warning("Agent response was empty, generating fallback plan")
-            monitoring_plans[workload_name] = MonitoringPlan(
+            monitoring_plan = MonitoringPlan(
                 markdown_plan="# Fallback Monitoring Plan\n\nAgent failed to generate response content. Please try regenerating the plan."
             )
     else:
         printer.error("Agent failed to respond, generating fallback plan")
-        monitoring_plans[workload_name] = MonitoringPlan(
+        monitoring_plan = MonitoringPlan(
             markdown_plan="# Fallback Monitoring Plan\n\nAgent failed to generate a response. Please check the agent configuration and try again."
         )
 
-    return {"monitoring_plans": monitoring_plans}
+    return {"monitoring_plan": monitoring_plan}
 
 def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, MonitoringFeedback]:
     """Evaluate the monitoring deployment plan using a critic agent."""
@@ -207,22 +208,22 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     
     printer.info(f"Evaluating monitoring deployment plan (Round {feedback.round_count}/{MAX_EVALUATION_ROUNDS})...")
     
-    # Check if monitoring plans exist
-    if not workflow.monitoring_plans or len(workflow.monitoring_plans) == 0:
-        printer.error("No monitoring plans found to evaluate. Setting feedback as failed.")
+    # Check if monitoring plan exists
+    if not workflow.monitoring_plan:
+        printer.error("No monitoring plan found to evaluate. Setting feedback as failed.")
         feedback.critic_approved = False
-        feedback.feedback_text = "No monitoring plans were generated. Please regenerate the monitoring plan."
+        feedback.feedback_text = "No monitoring plan was generated. Please regenerate the monitoring plan."
         return {"monitoring_plan_feedback": feedback}
     
-    # Get the first monitoring plan
-    workload_name, monitoring_plan = workload_utils.get_first_workload(workflow.monitoring_plans)
+    # Get the workload name for context
+    workload_name = workflow.verified_oss_workload.name if workflow.verified_oss_workload else "Unknown"
     
     # Prepare the evaluation prompt
     plan_text = f"""
     Monitoring Plan for {workload_name}:
     
     ## Markdown Formatted Plan
-    {monitoring_plan.markdown_plan or 'No plan provided'}
+    {workflow.monitoring_plan.markdown_plan or 'No plan provided'}
     """
 
     # Include previous feedback if this is not the first round
@@ -269,7 +270,7 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
 
 def approve_monitoring_deployment_plan(workflow: Workflow) -> dict[str, bool]:
     """Request final approval for the generated monitoring deployment plan."""
-    approval = interrupt({"monitoring_plans": workflow.monitoring_plans})
+    approval = interrupt({"monitoring_plan": workflow.monitoring_plan})
 
     status = "approved" if approval else "not approved"
     if approval: printer.success(f"Monitoring deployment plan {status}.")
@@ -277,7 +278,44 @@ def approve_monitoring_deployment_plan(workflow: Workflow) -> dict[str, bool]:
 
     return {"monitoring_plan_approval": approval}
 
+def structure_monitoring_deployment_plan(workflow: Workflow) -> dict[str, MonitoringPlan]:
+    """Structure the monitoring deployment plan into a JSON format."""
+    workload_name = workflow.verified_oss_workload.name if workflow.verified_oss_workload else "Unknown"
+    printer.out(f"Structuring monitoring deployment plan of {workload_name} for agentic use...")
 
+    instructions = []
+    add_instruction = tools.create_add_instruction(instructions)
+
+    analysis_prompt = f"""
+    You need to structure the monitoring deployment plan for {workload_name} into a JSON format
+    {workflow.monitoring_plan.markdown_plan or "No plan provided"}
+    """
+
+    response, _ = agent_utils.AgentManager.create_and_run_agent(
+        prompt=analysis_prompt,
+        tools=[add_instruction],
+        agent_prompt=prompts.STRUCTURE_MONITORING_PLAN_PROMPT
+    )
+
+    if response:
+        response_content = agent_utils.AgentManager.get_agent_response_content(response)
+        if response_content:
+            printer.success("Structured monitoring deployment plan successfully.")
+            printer.out(response_content)
+            try:
+               workflow.monitoring_plan.structured_plan = instructions
+               printer.out(f"Structured Plan: {workflow.monitoring_plan.structured_plan}")
+            except Exception as e:
+                printer.error(f"Failed to parse structured plan: {str(e)}")
+                workflow.monitoring_plan = MonitoringPlan(markdown_plan="Error structuring plan.")
+        else:
+            printer.warning("Agent response was empty, structuring failed.")
+            workflow.monitoring_plan = MonitoringPlan(markdown_plan="Error structuring plan.")
+
+
+    return {"monitoring_plan": workflow.monitoring_plan}
+
+# routers
 def route_before_planning(workflow: Workflow) -> bool:
     """Determine whether to proceed with plan generation or end workflow."""
     return bool(workflow.confirmed_to_plan)
@@ -306,6 +344,7 @@ def build_graph() -> StateGraph:
     builder.add_node("generate_monitoring_deployment_plan", generate_monitoring_deployment_plan)
     builder.add_node("evaluate_monitoring_deployment_plan", evaluate_monitoring_deployment_plan)
     builder.add_node("approve_monitoring_deployment_plan", approve_monitoring_deployment_plan)
+    builder.add_node("structure_monitoring_deployment_plan", structure_monitoring_deployment_plan)
 
     # EDGES
     # Pod Scanning and Workflow Identification Phase
@@ -323,7 +362,7 @@ def build_graph() -> StateGraph:
         {True: "generate_monitoring_deployment_plan", False: END},
     )
 
-    # Optimizer-Evaluator Loop
+    # Deployment Planning Phase (Generator-Evaluator Loop)
     builder.add_edge("generate_monitoring_deployment_plan", "evaluate_monitoring_deployment_plan")
     builder.add_conditional_edges(
         "evaluate_monitoring_deployment_plan",
@@ -334,7 +373,8 @@ def build_graph() -> StateGraph:
         },
     )
 
-    builder.add_edge("approve_monitoring_deployment_plan", END)
+    builder.add_edge("approve_monitoring_deployment_plan", "structure_monitoring_deployment_plan")
+    builder.add_edge("structure_monitoring_deployment_plan", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)

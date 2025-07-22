@@ -1,6 +1,8 @@
 import k8s.client
 from .utils import gh_utils
 import re
+from printer import printer
+from typing import Dict
 
 def _flatten_dict(data: dict, parent_key: str = '', separator: str = '.') -> dict:
     """Flatten a nested dictionary using dot notation."""
@@ -116,6 +118,21 @@ def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
         detected_oss_workload_names.append(workload_name.lower())
         return f"Added {workload_name} to the detected OSS workloads list"
     return add_oss_workload
+
+def create_add_instruction(instruction_list: list) -> callable:
+    """Create the add_instruction tool function."""
+    def add_instruction(type: str, content: str) -> str:
+        """Add an instruction to the instruction list.
+        
+        Args:
+            type: The type of instruction (e.g., 'KubectlCommand', 'HelmCommand', 'CreateFile', 'Other')
+            content: The actual content of the instruction
+        """
+        instruction = (type, content)
+        printer.info(f"Adding instruction: {instruction}")
+        instruction_list.append(instruction)
+        return f"Added instruction: {instruction}"
+    return add_instruction
 
 def generate_workload_detection_analysis_prompt(workloads: dict[str, k8s.client.Workload]) -> str:
     analysis_prompt = """Please analyze the following Kubernetes workloads (services) and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.

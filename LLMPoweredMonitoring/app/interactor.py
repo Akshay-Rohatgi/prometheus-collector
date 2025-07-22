@@ -38,9 +38,12 @@ move_on = input("Would you like to generate a monitoring deployment plan? (yes/n
 if move_on == "yes" or len(move_on) == 0:
     response = requests.post(f"{BASE_URL}/generate_monitoring_plan", json={"generate": True})
     client_print(f"Monitoring deployment plan response")
-    for name, plan in dict(response.json())['monitoring_plans'].items():
-        client_print(f"Plan for {name}")
-        console.print(Markdown(plan['markdown_plan']))
+    monitoring_plan = dict(response.json())['monitoring_plan']
+    if monitoring_plan and monitoring_plan.get('markdown_plan'):
+        rich.print(monitoring_plan['markdown_plan'])
+        console.print(Markdown(monitoring_plan['markdown_plan']))
+    else:
+        client_print("No monitoring plan was generated.")
 else:
     exit(0)
 
