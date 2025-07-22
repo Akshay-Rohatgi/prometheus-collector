@@ -1,8 +1,14 @@
 from github import Github, ContentFile, Repository
+from dotenv import load_dotenv
+import os
 
 def get_github_client(token: str = None) -> Github:
     """Create a GitHub client using the provided token."""
+    load_dotenv()
+    if os.getenv("GITHUB_TOKEN"): token = os.getenv("GITHUB_TOKEN")
+
     if token: return Github(token)
+    
     # Unauthenticated client if no token is provided
     return Github() 
 

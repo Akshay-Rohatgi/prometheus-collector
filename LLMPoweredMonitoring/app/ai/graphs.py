@@ -170,7 +170,7 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Run the optimizer agent
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        tools=[tools.get_chart_yaml_version, tools.get_values_yaml_formatted],
+        tools=[tools.get_chart_yaml_version, tools.get_values_yaml_formatted, tools.get_chart_readme, tools.search_values_keys],
         agent_prompt=prompts.NEW_MONITORING_PLAN_GENERATION_PROMPT
     )
     

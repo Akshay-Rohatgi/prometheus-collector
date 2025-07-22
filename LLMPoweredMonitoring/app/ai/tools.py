@@ -1,5 +1,6 @@
 import k8s.client
 from .utils import gh_utils
+import re
 
 def _flatten_dict(data: dict, parent_key: str = '', separator: str = '.') -> dict:
     """Flatten a nested dictionary using dot notation."""
@@ -62,6 +63,51 @@ def get_values_yaml_formatted(exporter_name: str) -> dict:
             return {"error": f"Could not find values.yaml for prometheus-{exporter_name}-exporter: {str(e)}"}
     except Exception as e:
         return {"error": f"Error accessing GitHub repository: {str(e)}"}
+
+def get_chart_readme(exporter_name: str) -> str:
+    """Get the README.md content for a prometheus exporter chart."""
+    try:
+        # Get GitHub client and repo
+        github_client = gh_utils.get_github_client()
+        repo = gh_utils.get_repo(github_client, "prometheus-community/helm-charts")
+        
+        # Get README.md content from the exporter directory
+        chart_dir = f"charts/prometheus-{exporter_name}-exporter"
+        try:
+            directory_content = gh_utils.get_directory_content(repo, chart_dir)
+            readme_content = gh_utils.get_file_content_from_directory(repo, directory_content, "README.md")
+            
+            return f"README for prometheus-{exporter_name}-exporter:\n\n{readme_content}"
+        except Exception as e:
+            return f"Could not find README.md for prometheus-{exporter_name}-exporter: {str(e)}"
+    except Exception as e:
+        return f"Error accessing GitHub repository: {str(e)}"
+
+def search_values_keys(exporter_name: str, regex_pattern: str) -> dict:
+    """Search for keys in values.yaml that match a regex pattern."""
+    try:
+        # Get the flattened values first
+        values_dict = get_values_yaml_formatted(exporter_name)
+        
+        # Check if there was an error getting the values
+        if "error" in values_dict:
+            return values_dict
+        
+        # Compile the regex pattern
+        try:
+            pattern = re.compile(regex_pattern, re.IGNORECASE)
+        except re.error as e:
+            return {"error": f"Invalid regex pattern '{regex_pattern}': {str(e)}"}
+        
+        # Search for matching keys
+        matching_keys = {}
+        for key, value in values_dict.items():
+            if pattern.search(key):
+                matching_keys[key] = value
+        
+        return matching_keys
+    except Exception as e:
+        return {"error": f"Error searching values for prometheus-{exporter_name}-exporter: {str(e)}"}
 
 def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
     """Create the add_oss_workload tool function."""
