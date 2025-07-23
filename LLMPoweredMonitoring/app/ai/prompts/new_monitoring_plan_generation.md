@@ -57,7 +57,7 @@ helm install azmon-kafka-exporter --namespace=azmon-kafka-exporter --create-name
         - **USE** the search_values_keys() tool to quickly locate specific configuration parameters when you need to find connection strings, authentication fields, or monitoring settings.
         - **REFERENCE** the get_chart_readme() tool output in your plan to include any important usage notes, prerequisites, or warnings mentioned in the official documentation.
 
-2. If the exporter does not automatically create a service monitor, you should create one manually. You can find more information about how to create a service monitor in the Azure Monitor documentation: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd.
+2. If the exporter does not automatically create a service monitor, you should create one manually. You can find more information about how to create a service monitor in the Azure Monitor documentation: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-metrics-scrape-crd. Label the step as optional as it may not always be necessary if the exporter automatically creates a service monitor. 
 
 ## 2. Configure Service Monitor (optional)
 * Some things to note about the above step:

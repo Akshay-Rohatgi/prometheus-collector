@@ -264,166 +264,222 @@ console = Console()
 # confidence.\n\n---\n\n### **Detected OSS Workloads**\nUsing the `add_oss_workload` tool where
 # applicable:\n\n1. **hello-world**: RabbitMQ core service  \n2. **nginx-project**: Nginx core service
 # \n3. **my-cluster-kafka-brokers**: Kafka core brokers"""))
-console.print(Markdown("""### **Analysis of "hello-world"**
-1. **SERVICE NAME ANALYSIS**:
-   - The name "hello-world" is generic and does not represent a well-known OSS project. However, the
-labels indicate its connection to RabbitMQ (`'app.kubernetes.io/component': 'rabbitmq'`), which is a
-widely used OSS message broker.
+# console.print(Markdown("""### **Analysis of "hello-world"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - The name "hello-world" is generic and does not represent a well-known OSS project. However, the
+# labels indicate its connection to RabbitMQ (`'app.kubernetes.io/component': 'rabbitmq'`), which is a
+# widely used OSS message broker.
 
-2. **NAMESPACE ANALYSIS**:
-   - "hello-world" is in the default namespace, which is neutral but does not detract from its
-suitability.
+# 2. **NAMESPACE ANALYSIS**:
+#    - "hello-world" is in the default namespace, which is neutral but does not detract from its
+# suitability.
 
-3. **LABELS AND ANNOTATIONS ANALYSIS**:
-   - Labels clearly indicate it is part of RabbitMQ, a major OSS project
-(`'app.kubernetes.io/part-of': 'rabbitmq'`).
+# 3. **LABELS AND ANNOTATIONS ANALYSIS**:
+#    - Labels clearly indicate it is part of RabbitMQ, a major OSS project
+# (`'app.kubernetes.io/part-of': 'rabbitmq'`).
 
-4. **PORT AND PROTOCOL ANALYSIS**:
-   - Prominent RabbitMQ ports are present:
-     - **5672** (AMQP)
-     - **15672** (Management UI)
-     - **15692** (Prometheus metrics).
-   - This strongly indicates it is a RabbitMQ core service.
+# 4. **PORT AND PROTOCOL ANALYSIS**:
+#    - Prominent RabbitMQ ports are present:
+#      - **5672** (AMQP)
+#      - **15672** (Management UI)
+#      - **15692** (Prometheus metrics).
+#    - This strongly indicates it is a RabbitMQ core service.
 
-5. **SELECTOR ANALYSIS**:
-   - Labels reinforce its role as RabbitMQ.
+# 5. **SELECTOR ANALYSIS**:
+#    - Labels reinforce its role as RabbitMQ.
 
-**Decision**: High confidence that this is a core RabbitMQ service.
-✅ **Add workload**: "hello-world"
+# **Decision**: High confidence that this is a core RabbitMQ service.
+# ✅ **Add workload**: "hello-world"
 
----
+# ---
 
-### **Analysis of "hello-world-nodes"**
-1. **SERVICE NAME ANALYSIS**:
-   - Name suggests supporting RabbitMQ nodes functionality rather than the core RabbitMQ service.
+# ### **Analysis of "hello-world-nodes"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - Name suggests supporting RabbitMQ nodes functionality rather than the core RabbitMQ service.
 
-2. **NAMESPACE ANALYSIS**:
-   - Default namespace is neutral.
+# 2. **NAMESPACE ANALYSIS**:
+#    - Default namespace is neutral.
 
-3. **LABELS AND ANNOTATIONS ANALYSIS**:
-   - Labels indicate association with RabbitMQ but suggest node-level functionality rather than the
-main application workload.
+# 3. **LABELS AND ANNOTATIONS ANALYSIS**:
+#    - Labels indicate association with RabbitMQ but suggest node-level functionality rather than the
+# main application workload.
 
-4. **PORT AND PROTOCOL ANALYSIS**:
-   - Ports are primarily RabbitMQ node-related:
-     - **4369** (epmd—Erlang Port Mapper Daemon for clustering)
-     - **25672** (RabbitMQ cluster communication).
-   - These confirm it as a supporting RabbitMQ component for clustering, not the core service.
+# 4. **PORT AND PROTOCOL ANALYSIS**:
+#    - Ports are primarily RabbitMQ node-related:
+#      - **4369** (epmd—Erlang Port Mapper Daemon for clustering)
+#      - **25672** (RabbitMQ cluster communication).
+#    - These confirm it as a supporting RabbitMQ component for clustering, not the core service.
 
-**Decision**: Low confidence (supporting infrastructure rather than core service).
-❌ **Do not add workload**.
+# **Decision**: Low confidence (supporting infrastructure rather than core service).
+# ❌ **Do not add workload**.
 
----
+# ---
 
-### **Analysis of "investibots-service"**
-1. **SERVICE NAME ANALYSIS**:
-   - Name appears custom or proprietary ("investibots"). No indication of a widely used OSS project.
+# ### **Analysis of "investibots-service"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - Name appears custom or proprietary ("investibots"). No indication of a widely used OSS project.
 
-2. **NAMESPACE ANALYSIS**:
-   - Default namespace is neutral.
+# 2. **NAMESPACE ANALYSIS**:
+#    - Default namespace is neutral.
 
-3. **LABELS AND ANNOTATIONS ANALYSIS**:
-   - No OSS-related labels.
+# 3. **LABELS AND ANNOTATIONS ANALYSIS**:
+#    - No OSS-related labels.
 
-4. **PORT AND PROTOCOL ANALYSIS**:
-   - **80** (HTTP) is generic and provides no specific indication.
+# 4. **PORT AND PROTOCOL ANALYSIS**:
+#    - **80** (HTTP) is generic and provides no specific indication.
 
-**Decision**: Low confidence (custom, non-OSS workload).
-❌ **Do not add workload**.
+# **Decision**: Low confidence (custom, non-OSS workload).
+# ❌ **Do not add workload**.
 
----
+# ---
 
-### **Analysis of "kubernetes"**
-1. **SERVICE NAME ANALYSIS**:
-   - This is the default Kubernetes API service, a system component.
+# ### **Analysis of "kubernetes"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - This is the default Kubernetes API service, a system component.
 
-**Decision**: Excluded by rule (system component).
-❌ **Do not add workload**.
+# **Decision**: Excluded by rule (system component).
+# ❌ **Do not add workload**.
 
----
+# ---
 
-### **Analysis of "nginx-project"**
-1. **SERVICE NAME ANALYSIS**:
-   - "nginx" indicates the core workload of NGINX, a widely used OSS web server/proxy.
+# ### **Analysis of "nginx-project"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - "nginx" indicates the core workload of NGINX, a widely used OSS web server/proxy.
 
-2. **NAMESPACE ANALYSIS**:
-   - Default namespace is neutral.
+# 2. **NAMESPACE ANALYSIS**:
+#    - Default namespace is neutral.
 
-3. **LABELS AND ANNOTATIONS ANALYSIS**:
-   - Generic labels but annotations show a link to NGINX (`"app":"nginx-project"`).
+# 3. **LABELS AND ANNOTATIONS ANALYSIS**:
+#    - Generic labels but annotations show a link to NGINX (`"app":"nginx-project"`).
 
-4. **PORT AND PROTOCOL ANALYSIS**:
-   - Port **80** (HTTP) is consistent with NGINX workloads.
+# 4. **PORT AND PROTOCOL ANALYSIS**:
+#    - Port **80** (HTTP) is consistent with NGINX workloads.
 
-**Decision**: High confidence that this is an NGINX core workload.
-✅ **Add workload**: "nginx-project"
+# **Decision**: High confidence that this is an NGINX core workload.
+# ✅ **Add workload**: "nginx-project"
 
----
+# ---
 
-### **Analysis of "prometheus-reference-service"**
-1. **SERVICE NAME ANALYSIS**:
-   - Name mentions Prometheus, but it does not directly align with the core Prometheus server.
+# ### **Analysis of "prometheus-reference-service"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - Name mentions Prometheus, but it does not directly align with the core Prometheus server.
 
-2. **NAMESPACE ANALYSIS**:
-   - Default namespace is neutral.
+# 2. **NAMESPACE ANALYSIS**:
+#    - Default namespace is neutral.
 
-3. **LABELS AND ANNOTATIONS ANALYSIS**:
-   - Labels (`'app': 'prometheus-reference-app'`) and annotations suggest it is an exporter and custom
-metrics collector rather than the core Prometheus service.
+# 3. **LABELS AND ANNOTATIONS ANALYSIS**:
+#    - Labels (`'app': 'prometheus-reference-app'`) and annotations suggest it is an exporter and custom
+# metrics collector rather than the core Prometheus service.
 
-4. **PORT AND PROTOCOL ANALYSIS**:
-   - Ports are unrelated to the Prometheus core server (custom metrics endpoints: 2112, 2113, and
-2114).
+# 4. **PORT AND PROTOCOL ANALYSIS**:
+#    - Ports are unrelated to the Prometheus core server (custom metrics endpoints: 2112, 2113, and
+# 2114).
 
-**Decision**: Low confidence (monitoring exporter).
-❌ **Do not add workload**.
+# **Decision**: Low confidence (monitoring exporter).
+# ❌ **Do not add workload**.
 
----
+# ---
 
-### **Analysis of "rabbitmq-rabbitmq-messaging-topology-operator-webhook"**
-1. **SERVICE NAME ANALYSIS**:
-   - Name indicates it is a supporting operator service (webhook) for RabbitMQ rather than the core
-workload.
+# ### **Analysis of "rabbitmq-rabbitmq-messaging-topology-operator-webhook"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - Name indicates it is a supporting operator service (webhook) for RabbitMQ rather than the core
+# workload.
 
-**Decision**: Excluded by rule (operator or webhook service).
-❌ **Do not add workload**.
+# **Decision**: Excluded by rule (operator or webhook service).
+# ❌ **Do not add workload**.
 
----
+# ---
 
-### **Analysis of "my-cluster-kafka-bootstrap"**
-1. **SERVICE NAME ANALYSIS**:
-   - Name indicates it is a bootstrap service for Kafka, not the core Kafka brokers.
+# ### **Analysis of "my-cluster-kafka-bootstrap"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - Name indicates it is a bootstrap service for Kafka, not the core Kafka brokers.
 
-**Decision**: Excluded by rule (bootstrap service).
-❌ **Do not add workload**.
+# **Decision**: Excluded by rule (bootstrap service).
+# ❌ **Do not add workload**.
 
----
+# ---
 
-### **Analysis of "my-cluster-kafka-brokers"**
-1. **SERVICE NAME ANALYSIS**:
-   - Name strongly suggests it is part of Kafka's core brokers, indicating a major OSS project.
+# ### **Analysis of "my-cluster-kafka-brokers"**
+# 1. **SERVICE NAME ANALYSIS**:
+#    - Name strongly suggests it is part of Kafka's core brokers, indicating a major OSS project.
 
-2. **NAMESPACE ANALYSIS**:
-   - Namespace "kafka" matches the workload name.
+# 2. **NAMESPACE ANALYSIS**:
+#    - Namespace "kafka" matches the workload name.
 
-3. **LABELS AND ANNOTATIONS ANALYSIS**:
-   - Labels confirm it is part of Kafka (`'strimzi.io/component-type': 'kafka'`,
-`'strimzi.io/cluster': 'my-cluster'`, `'strimzi.io/kind': 'Kafka'`).
+# 3. **LABELS AND ANNOTATIONS ANALYSIS**:
+#    - Labels confirm it is part of Kafka (`'strimzi.io/component-type': 'kafka'`,
+# `'strimzi.io/cluster': 'my-cluster'`, `'strimzi.io/kind': 'Kafka'`).
 
-4. **PORT AND PROTOCOL ANALYSIS**:
-   - Prominent Kafka ports are present:
-     - **9092** (client connections)
-     - **9093** (TLS connections).
+# 4. **PORT AND PROTOCOL ANALYSIS**:
+#    - Prominent Kafka ports are present:
+#      - **9092** (client connections)
+#      - **9093** (TLS connections).
 
-**Decision**: High confidence that this is a core Kafka brokers service.
-✅ **Add workload**: "my-cluster-kafka-brokers"
+# **Decision**: High confidence that this is a core Kafka brokers service.
+# ✅ **Add workload**: "my-cluster-kafka-brokers"
 
----
+# ---
 
-### **Outcome**
+# ### **Outcome**
 
-Detected high-confidence OSS workloads:
-- "hello-world"
-- "nginx-project"
-- "my-cluster-kafka-brokers"
-                       """))
+# Detected high-confidence OSS workloads:
+# - "hello-world"
+# - "nginx-project"
+# - "my-cluster-kafka-brokers"
+#                        """))
+
+from mistletoe import Document
+from mistletoe.markdown_renderer import MarkdownRenderer
+
+def preprocess_markdown(content):
+   doc = Document(content)
+   
+   # Walk the AST and filter out unwanted sections
+   filtered_children = []
+   skip_until_next_header = False
+   
+   for child in doc.children:
+      if hasattr(child, 'level') and hasattr(child, 'children'):  # Header
+         header_text = ''.join(token.content for token in child.children if hasattr(token, 'content'))
+         if any(word in header_text.lower() for word in ['optional', 'references']):
+               skip_until_next_header = True
+               continue
+         else:
+               skip_until_next_header = False
+      
+      if not skip_until_next_header:
+         filtered_children.append(child)
+    
+   doc.children = filtered_children
+   # get the content back as a string
+   return MarkdownRenderer().render(doc)
+
+test_content = """# Monitoring Deployment Plan for NGINX Application in Kubernetes using Prometheus
+This document outlines a comprehensive monitoring deployment plan for an NGINX application deployed in Kubernetes utilizing Prometheus for monitoring.
+
+## Install Nginx exporter
+```
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install nginx-exporter prometheus-community/prometheus-nginx-exporter \
+  --namespace default \
+  --set nginx.status.endpoint=http://nginx-deployment.default.svc.cluster.local:8080/status \
+  --set serviceMonitor.enabled=true \
+  --set serviceMonitor.apiVersion=azmonitoring.coreos.com/v1
+```
+
+## Configure service monitor (optional)
+The above Helm chart will automatically create a ServiceMonitor resource named `nginx-exporter`, pre-configured for Azure Managed Prometheus (`apiVersion=azmonitoring.coreos.com/v1`).
+```
+dummy yaml data
+```
+
+## Configure pod annotations (optional)
+```
+dummy yaml data
+```
+"""
+
+rich.print(test_content)
+processed_content = preprocess_markdown(test_content)
+rich.print(processed_content)

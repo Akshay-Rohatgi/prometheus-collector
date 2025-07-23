@@ -3,6 +3,8 @@ from .utils import gh_utils
 import re
 from printer import printer
 from typing import Dict
+from mistletoe import Document
+from mistletoe.markdown_renderer import MarkdownRenderer
 
 def _flatten_dict(data: dict, parent_key: str = '', separator: str = '.') -> dict:
     """Flatten a nested dictionary using dot notation."""
@@ -133,6 +135,30 @@ def create_add_instruction(instruction_list: list) -> callable:
         instruction_list.append(instruction)
         return f"Added instruction: {instruction}"
     return add_instruction
+
+def preprocess_markdown(content) -> str:
+   doc = Document(content)
+   
+   # Walk the AST and filter out unwanted sections
+   filtered_children = []
+   skip_until_next_header = False
+   
+   for child in doc.children:
+      if hasattr(child, 'level') and hasattr(child, 'children'):  # Header
+         header_text = ''.join(token.content for token in child.children if hasattr(token, 'content'))
+         if any(word in header_text.lower() for word in ['optional', 'references']):
+               skip_until_next_header = True
+               continue
+         else:
+               skip_until_next_header = False
+      
+      if not skip_until_next_header:
+         filtered_children.append(child)
+    
+   doc.children = filtered_children
+
+   # get the content back as a string
+   return MarkdownRenderer().render(doc)
 
 def generate_workload_detection_analysis_prompt(workloads: dict[str, k8s.client.Workload]) -> str:
     analysis_prompt = """Please analyze the following Kubernetes workloads (services) and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.

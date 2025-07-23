@@ -1,9 +1,8 @@
 from k8s import client as k8s_client
 from . import tools, models, prompts
-from .utils import print_utils, agent_utils, workload_utils, gh_utils
+from .utils import print_utils, agent_utils, workload_utils
 from .config import K8S_CONFIG_PATH, MAX_EVALUATION_ROUNDS, OSS_WORKLOAD_EMOJI
 from printer import printer
-from typing import Dict, Optional
 from pydantic import BaseModel
 from langgraph.types import interrupt
 from langgraph.graph import StateGraph
@@ -288,11 +287,12 @@ def structure_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monito
 
     analysis_prompt = f"""
     You need to structure the monitoring deployment plan for {workload_name} into a JSON format
-    {workflow.monitoring_plan.markdown_plan or "No plan provided"}
+    {tools.preprocess_markdown(workflow.monitoring_plan.markdown_plan) or "No plan provided"}
     """
 
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
+        model=models.llm_4o_mini,
         tools=[add_instruction],
         agent_prompt=prompts.STRUCTURE_MONITORING_PLAN_PROMPT
     )

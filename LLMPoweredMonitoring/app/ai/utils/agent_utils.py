@@ -11,7 +11,7 @@ class AgentManager:
     """Manages the creation and execution of AI agents."""
 
     @staticmethod
-    def create_and_run_agent(prompt: str, tools: list = [], agent_prompt: Optional[str] = None, error_handler: Optional[Callable] = None) -> Tuple[Any, float]:
+    def create_and_run_agent(prompt: str, model = llm_41, tools: list = [], agent_prompt: Optional[str] = None, error_handler: Optional[Callable] = None) -> Tuple[Any, float]:
         """Create and run an AI agent with the specified configuration.
 
         Args:
@@ -26,7 +26,7 @@ class AgentManager:
                 - The total cost of the agent execution
         """
         agent = create_react_agent(
-            llm_41,
+            model=model,
             tools=tools,
             prompt=agent_prompt,
         )

@@ -40,7 +40,7 @@ if move_on == "yes" or len(move_on) == 0:
     client_print(f"Monitoring deployment plan response")
     monitoring_plan = dict(response.json())['monitoring_plan']
     if monitoring_plan and monitoring_plan.get('markdown_plan'):
-        rich.print(monitoring_plan['markdown_plan'])
+        client_print(monitoring_plan['markdown_plan'])
         console.print(Markdown(monitoring_plan['markdown_plan']))
     else:
         client_print("No monitoring plan was generated.")
@@ -50,4 +50,9 @@ else:
 approve = input("Do you approve the monitoring deployment plan? (yes/no): ").strip().lower()
 if approve == "yes" or len(approve) == 0:
     response = requests.post(f"{BASE_URL}/approve_monitoring_plan", json={"approval": True})
-    client_print(f"Monitoring deployment plan approval response: {response.json()}")
+    monitoring_plan = dict(response.json())['monitoring_plan']
+    if monitoring_plan and monitoring_plan.get('structured_plan'):
+        # rich.print(monitoring_plan['structured_plan'])
+        for instruction in monitoring_plan['structured_plan']:
+            print("")
+            client_print(f"Type: {instruction[0]}, Content: {instruction[1]}")
