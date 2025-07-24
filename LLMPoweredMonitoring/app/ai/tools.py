@@ -1,5 +1,6 @@
 import k8s.client
 from .utils import gh_utils
+from .instructions import KubectlInstruction, HelmInstruction, CreateFileInstruction, OtherInstruction
 import re
 from printer import printer
 from typing import Dict
@@ -123,14 +124,27 @@ def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
 
 def create_add_instruction(instruction_list: list) -> callable:
     """Create the add_instruction tool function."""
-    def add_instruction(type: str, content: str) -> str:
+    def add_instruction(type: str, content: str, filename: str = None) -> str:
         """Add an instruction to the instruction list.
         
         Args:
-            type: The type of instruction (e.g., 'KubectlCommand', 'HelmCommand', 'CreateFile', 'Other')
+            type: The type of instruction (e.g., 'kubectl', 'helm', 'create_file', 'other')
             content: The actual content of the instruction
+            filename: Required for create_file type, the name of the file to create
         """
-        instruction = (type, content)
+        type_lower = type.lower()
+        
+        if type_lower == 'kubectl':
+            instruction = KubectlInstruction(command=content)
+        elif type_lower == 'helm':
+            instruction = HelmInstruction(command=content)
+        elif type_lower == 'create_file':
+            if not filename:
+                return "Error: filename is required for create_file instructions"
+            instruction = CreateFileInstruction(filename=filename, content=content)
+        else:
+            instruction = OtherInstruction(description=type, content=content)
+        
         printer.info(f"Adding instruction: {instruction}")
         instruction_list.append(instruction)
         return f"Added instruction: {instruction}"

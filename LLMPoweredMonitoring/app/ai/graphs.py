@@ -2,6 +2,7 @@ from k8s import client as k8s_client
 from . import tools, models, prompts
 from .utils import print_utils, agent_utils, workload_utils
 from .config import K8S_CONFIG_PATH, MAX_EVALUATION_ROUNDS, OSS_WORKLOAD_EMOJI
+from .instructions import MonitoringInstruction
 from printer import printer
 from pydantic import BaseModel
 from langgraph.types import interrupt
@@ -12,7 +13,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 class MonitoringPlan(BaseModel):
     markdown_plan: str = None
-    structured_plan: list[tuple[str, str]] = None
+    structured_plan: list[MonitoringInstruction] = None
 
 class MonitoringFeedback(BaseModel):
     round_count: int = 0
@@ -345,9 +346,17 @@ def deploy_structured_monitoring_plan(workflow: Workflow) -> dict[str, bool]:
     # Here you would implement the actual deployment logic
     # For now, we just simulate a successful deployment
     try:
-        for i, (instruction_type, content) in enumerate(workflow.monitoring_plan.structured_plan, 1):
-            printer.info(f"[{i}/{len(workflow.monitoring_plan.structured_plan)}] Executing {instruction_type}: {content[:50]}...")
-            # Simulate deployment steps
+        for i, instruction in enumerate(workflow.monitoring_plan.structured_plan, 1):
+            printer.info(f"[{i}/{len(workflow.monitoring_plan.structured_plan)}] Executing {instruction}")
+            # Simulate deployment steps based on instruction type
+            # if isinstance(instruction, KubectlInstruction):
+            #     # Execute kubectl command: instruction.command
+            # elif isinstance(instruction, HelmInstruction):
+            #     # Execute helm command: instruction.command
+            # elif isinstance(instruction, CreateFileInstruction):
+            #     # Create file: instruction.filename with content: instruction.content
+            # elif isinstance(instruction, OtherInstruction):
+            #     # Handle other instruction: instruction.description, instruction.content
             
         printer.success("🚀 Structured monitoring plan deployed successfully!")
         return {"deployment_success": True}

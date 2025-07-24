@@ -12,3 +12,4 @@ OSS_WORKLOAD_EMOJI = "🔍"
 
 # Agent configuration
 DEFAULT_MESSAGE_INDEX = 1  # Default index for extracting agent message content
+

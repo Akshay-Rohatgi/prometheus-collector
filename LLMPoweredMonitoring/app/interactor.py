@@ -56,24 +56,57 @@ if approve_plan == "yes" or len(approve_plan) == 0:
         console.print("─" * 60)
         
         for i, instruction in enumerate(monitoring_plan['structured_plan'], 1):
-            instruction_type = instruction[0]
-            content = instruction[1]
-            
-            # Color code by instruction type
-            if instruction_type == "KubectlCommand":
-                icon = "⚡"
-                color = "bright_blue"
-            elif instruction_type == "HelmCommand":
-                icon = "📦"
-                color = "bright_magenta"
-            elif instruction_type == "CreateFile":
-                icon = "📄"
-                color = "bright_green"
+            # Handle both old tuple format and new object format
+            if isinstance(instruction, dict):
+                # New object format - use the type field if available
+                instruction_type = instruction.get('type', 'unknown')
+                
+                if instruction_type == "kubectl":
+                    content = instruction['command']
+                    display_type = "KubectlCommand"
+                    icon = "⚡"
+                    color = "bright_blue"
+                elif instruction_type == "helm":
+                    content = instruction['command']
+                    display_type = "HelmCommand"
+                    icon = "📦"
+                    color = "bright_magenta"
+                elif instruction_type == "create_file":
+                    content = f"File: {instruction['filename']}\nContent: {instruction['content'][:100]}{'...' if len(instruction['content']) > 100 else ''}"
+                    display_type = "CreateFile"
+                    icon = "📄"
+                    color = "bright_green"
+                elif instruction_type == "other":
+                    content = f"{instruction['description']}: {instruction['content']}"
+                    display_type = instruction['description']
+                    icon = "🔧"
+                    color = "bright_yellow"
+                else:
+                    # Fallback for unknown types
+                    content = str(instruction)
+                    display_type = f"Unknown ({instruction_type})"
+                    icon = "❓"
+                    color = "bright_red"
             else:
-                icon = "🔧"
-                color = "bright_yellow"
+                # Old tuple format (backward compatibility)
+                display_type = instruction[0]
+                content = instruction[1]
+                
+                # Color code by instruction type
+                if display_type == "KubectlCommand":
+                    icon = "⚡"
+                    color = "bright_blue"
+                elif display_type == "HelmCommand":
+                    icon = "📦"
+                    color = "bright_magenta"
+                elif display_type == "CreateFile":
+                    icon = "📄"
+                    color = "bright_green"
+                else:
+                    icon = "🔧"
+                    color = "bright_yellow"
             
-            console.print(f"\n[bold]{i:2d}. {icon} [{color}]{instruction_type}[/{color}][/bold]")
+            console.print(f"\n[bold]{i:2d}. {icon} [{color}]{display_type}[/{color}][/bold]")
             console.print(f"    [dim]┌─[/dim] [green]{content}[/green]")
             console.print(f"    [dim]└─[/dim]")
 
