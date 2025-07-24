@@ -1,6 +1,6 @@
 from pydantic import BaseModel, model_validator
 
-phases = ["not-started", "workload-detection", "workload-selection"]
+phases = ["not-started", "workload-detection", "workload-selection", "monitoring-plan-generation", "completed"]
 
 class WorkflowStatus(BaseModel):
     active: bool = False

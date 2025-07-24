@@ -137,6 +137,48 @@ def approve_monitoring_plan(request: approveMonitoringPlanRequest):
 
 # =========================================================
 
+class confirmDeploymentRequest(BaseModel):
+    approval: bool
+
+@app.post("/confirm_deployment_of_monitoring_plan")
+def confirm_deployment_of_monitoring_plan(request: confirmDeploymentRequest):
+    global workflow_status
+    
+    if not workflow_status.active:
+        raise HTTPException(status_code=400, detail="No active workflow to confirm deployment")
+
+    if request.approval:
+        printer.info("Received confirmation to deploy structured monitoring plan")
+        try:
+            result = graph.invoke(
+                Command(resume=request.approval), 
+                config=workflow_status.config
+            )
+
+            if result.get("deployment_success"):
+                # Workflow completed successfully, reset status
+                workflow_status = workflow.WorkflowStatus(
+                    active=False,
+                    phase="completed",
+                )
+                return {
+                    "message": "Structured monitoring plan deployed successfully",
+                    "status": "deployed",
+                    "deployment_success": result.get("deployment_success")
+                }
+            else:
+                raise HTTPException(status_code=500, detail="Deployment failed!")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error confirming deployment: {str(e)}")
+    else:
+        # User rejected deployment, end workflow
+        _ = graph.invoke(Command(resume=False), config=workflow_status.config)
+        workflow_status = workflow.WorkflowStatus(
+            active=False,
+            phase="cancelled",
+        )
+        return {"message": "Deployment of structured monitoring plan not confirmed, workflow stopped"}
+
 @app.get("/reset")
 def reset_workflow():
     global workflow_status

@@ -142,16 +142,31 @@ def preprocess_markdown(content) -> str:
    # Walk the AST and filter out unwanted sections
    filtered_children = []
    skip_until_next_header = False
+   skip_level = None
    
    for child in doc.children:
-      if hasattr(child, 'level') and hasattr(child, 'children'):  # Header
-         header_text = ''.join(token.content for token in child.children if hasattr(token, 'content'))
-         if any(word in header_text.lower() for word in ['optional', 'references']):
-               skip_until_next_header = True
-               continue
-         else:
+      if hasattr(child, 'level'):  # This is a header
+         current_level = child.level
+         
+         # If we're currently skipping, check if this header ends the skip
+         if skip_until_next_header:
+            if current_level <= skip_level:
+               # This header is same level or higher, stop skipping
                skip_until_next_header = False
+               skip_level = None
+            else:
+               # This header is lower level, continue skipping
+               continue
+         
+         # Check if this header should start a skip section
+         if hasattr(child, 'children'):
+            header_text = ''.join(token.content for token in child.children if hasattr(token, 'content'))
+            if any(word in header_text.lower() for word in ['optional', 'references']):
+               skip_until_next_header = True
+               skip_level = current_level
+               continue  # Skip this header entirely
       
+      # If we're not skipping, include this content
       if not skip_until_next_header:
          filtered_children.append(child)
     

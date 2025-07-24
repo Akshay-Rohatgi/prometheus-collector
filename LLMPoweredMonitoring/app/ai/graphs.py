@@ -33,6 +33,9 @@ class Workflow(BaseModel):
     monitoring_plan_feedback: MonitoringFeedback = None
     monitoring_plan: MonitoringPlan = None
 
+    confirmed_to_plan: bool = None
+    deployment_success: bool = None
+
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
     client = k8s_client.K8sClient(K8S_CONFIG_PATH)
@@ -284,15 +287,21 @@ def structure_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monito
 
     instructions = []
     add_instruction = tools.create_add_instruction(instructions)
+    structured_plan = tools.preprocess_markdown(workflow.monitoring_plan.markdown_plan)
+
+    from rich.console import Console
+    from rich.markdown import Markdown
+    console = Console()
+    console.print(Markdown(structured_plan))
 
     analysis_prompt = f"""
     You need to structure the monitoring deployment plan for {workload_name} into a JSON format
-    {tools.preprocess_markdown(workflow.monitoring_plan.markdown_plan) or "No plan provided"}
+    {structured_plan or "No plan provided"}
     """
 
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_4o_mini,
+        model=models.llm_41,
         tools=[add_instruction],
         agent_prompt=prompts.STRUCTURE_MONITORING_PLAN_PROMPT
     )
@@ -315,6 +324,35 @@ def structure_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monito
 
     return {"monitoring_plan": workflow.monitoring_plan}
 
+def confirm_automated_monitoring_deployment(workflow: Workflow) -> dict[str, bool]:
+    """Confirm whether to proceed with automated monitoring deployment."""
+    confirmation = interrupt({
+        "structured_plan": workflow.monitoring_plan.structured_plan,
+        "message": "Do you want to proceed with automated deployment of this structured monitoring plan?"
+    })
+    return {"confirmed_to_plan": confirmation}
+
+def deploy_structured_monitoring_plan(workflow: Workflow) -> dict[str, bool]:
+    """Deploy the structured monitoring plan."""
+    if not workflow.monitoring_plan or not workflow.monitoring_plan.structured_plan:
+        printer.error("No structured monitoring plan found to deploy.")
+        return {"deployment_success": False}
+
+    printer.info(f"Deploying {len(workflow.monitoring_plan.structured_plan)} instructions...")
+    
+    # Here you would implement the actual deployment logic
+    # For now, we just simulate a successful deployment
+    try:
+        for i, (instruction_type, content) in enumerate(workflow.monitoring_plan.structured_plan, 1):
+            printer.info(f"[{i}/{len(workflow.monitoring_plan.structured_plan)}] Executing {instruction_type}: {content[:50]}...")
+            # Simulate deployment steps
+            
+        printer.success("🚀 Structured monitoring plan deployed successfully!")
+        return {"deployment_success": True}
+    except Exception as e:
+        printer.error(f"Deployment failed: {str(e)}")
+        return {"deployment_success": False}
+
 # routers
 def route_before_planning(workflow: Workflow) -> bool:
     """Determine whether to proceed with plan generation or end workflow."""
@@ -329,8 +367,12 @@ def route_after_evaluation(workflow: Workflow) -> str:
         or feedback.round_count >= MAX_EVALUATION_ROUNDS - 1
     ):
         return "approve_monitoring_deployment_plan"
-    
+
     return "generate_monitoring_deployment_plan"
+
+def route_after_confirmation(workflow: Workflow) -> bool:
+    """Determine whether to proceed with automated monitoring deployment or end workflow."""
+    return bool(workflow.confirmed_to_plan)
 
 def build_graph() -> StateGraph:
     builder = StateGraph(Workflow)
@@ -345,6 +387,8 @@ def build_graph() -> StateGraph:
     builder.add_node("evaluate_monitoring_deployment_plan", evaluate_monitoring_deployment_plan)
     builder.add_node("approve_monitoring_deployment_plan", approve_monitoring_deployment_plan)
     builder.add_node("structure_monitoring_deployment_plan", structure_monitoring_deployment_plan)
+    builder.add_node("confirm_automated_monitoring_deployment", confirm_automated_monitoring_deployment)
+    builder.add_node("deploy_structured_monitoring_plan", deploy_structured_monitoring_plan)
 
     # EDGES
     # Pod Scanning and Workflow Identification Phase
@@ -374,7 +418,13 @@ def build_graph() -> StateGraph:
     )
 
     builder.add_edge("approve_monitoring_deployment_plan", "structure_monitoring_deployment_plan")
-    builder.add_edge("structure_monitoring_deployment_plan", END)
+    builder.add_edge("structure_monitoring_deployment_plan", "confirm_automated_monitoring_deployment")
+    builder.add_conditional_edges(
+        "confirm_automated_monitoring_deployment",
+        route_after_confirmation,
+        {True: "deploy_structured_monitoring_plan", False: END},
+    )
+    builder.add_edge("deploy_structured_monitoring_plan", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)

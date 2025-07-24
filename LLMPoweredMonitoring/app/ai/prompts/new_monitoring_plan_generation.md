@@ -24,9 +24,19 @@ ALWAYS use these tools to get the current chart version and available configurat
 # Sample Structure and Instructions For the Monitoring Deployment Plan:
 
 
-0. Discuss any prerequisites or additional steps that may be required for the exporter to work properly. For example, if the exporter requires a specific configuration or setup, you should include that in the plan. For example, if the exporter requires a specific configuration file or change in the deployment, you should include that in the plan.
 ## 0. Prerequisites
-- Provide instructions for any prerequisites that need to be met before deploying the monitoring plan. Provide information as long as they do not violate the assumptions above. For example, if the exporter requires a specific configuration or setup, you should include that in the plan. For example, if the exporter requires a specific configuration file or change in the deployment, you should include that in the plan.
+- Provide instructions for any prerequisites that need to be met before deploying the monitoring plan. Provide information as long as they do not violate the assumptions above. For example, if the exporter requires a specific configuration or setup, you should include that in the plan. 
+- For example, when working with Nginx you need to ensure that the Nginx server is configured to expose the metrics endpoint at /stub_status. You should provide steps to configure Nginx to expose the metrics endpoint if it is not already configured. The instructions may look like this:
+
+  - Ensure that the Nginx server is configured to expose the metrics endpoint at /stub_status. You can do this by adding the following configuration to your Nginx server block:
+    ```
+    location /stub_status {
+        stub_status on;
+        allow 127.0.0.1;
+        allow <your-allowed-ip>;
+        deny all;
+    }
+    ```
 
 1. The first step should be installing the Prometheus exporters via Helm charts or kubectl commands. An example is below:
 
@@ -35,6 +45,7 @@ helm install azmon-kafka-exporter --namespace=azmon-kafka-exporter --create-name
 
 * Some things to note about the above step
     - First of all, this step may not always exist, as there may not be a helm chart available for the specific service you are monitoring. However, there is a higher chance than not that there is a helm chart available for the service you are monitoring. You should use this repository as your source of truth: https://github.com/prometheus-community/helm-charts/tree/main/charts
+    - You should avoid installing the exporter from other sources like the OCI//GHCR registry or other sources, as the helm charts in the above repository are the most reliable and well-maintained.
     - Remember to always enable any service or pod monitoring that is available for the workload you are working with. This is important to ensure that the workload is properly monitored by Azure Managed Prometheus.
     - It is also important to always set the apiVersion to azmonitoring.coreos.com/v1, as this is required for Azure Managed Prometheus to work properly with the service monitors and pod monitors that are created by the exporters.
     - You can find more information about the specific chart and how to set its values in its values.yaml file.
