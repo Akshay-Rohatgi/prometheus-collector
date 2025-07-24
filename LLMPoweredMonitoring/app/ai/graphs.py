@@ -36,6 +36,8 @@ class Workflow(BaseModel):
     confirmed_to_plan: bool = None
     deployment_success: bool = None
 
+    recommended_dashboards: dict[str, int] = None
+
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
     client = k8s_client.K8sClient(K8S_CONFIG_PATH)
@@ -353,6 +355,37 @@ def deploy_structured_monitoring_plan(workflow: Workflow) -> dict[str, bool]:
         printer.error(f"Deployment failed: {str(e)}")
         return {"deployment_success": False}
 
+def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
+    """Recommend dashboards based on the structured monitoring plan."""
+    if not workflow.monitoring_plan or not workflow.monitoring_plan.structured_plan:
+        printer.error("No structured monitoring plan found to recommend dashboards.")
+        return {"dashboards": {}}
+
+
+    analysis_prompt = f"""You need to recommend Grafana dashboards based on the monitoring plan for {workflow.verified_oss_workload.name}.
+
+    Here is the monitoring plan in markdown format:
+    {workflow.monitoring_plan.markdown_plan}
+
+    """
+    response, _ = agent_utils.AgentManager.create_and_run_agent(
+        prompt=analysis_prompt,
+        model=models.llm_41,
+        tools=[],
+        agent_prompt=prompts.FIND_GRAFANA_DASHBOARD_PROMPT
+    )
+    
+    if response:
+        response_content = agent_utils.AgentManager.get_agent_response_content(response)
+        if response_content:
+            printer.success("Recommended dashboards successfully.")
+            printer.out(response_content)
+        else:
+            printer.warning("Agent response was empty, no dashboards recommended.")
+
+    recommended_dashboards = {"test": 1234}  # Placeholder for actual dashboard recommendations
+    return {"dashboards": recommended_dashboards}
+
 # routers
 def route_before_planning(workflow: Workflow) -> bool:
     """Determine whether to proceed with plan generation or end workflow."""
@@ -389,6 +422,7 @@ def build_graph() -> StateGraph:
     builder.add_node("structure_monitoring_deployment_plan", structure_monitoring_deployment_plan)
     builder.add_node("confirm_automated_monitoring_deployment", confirm_automated_monitoring_deployment)
     builder.add_node("deploy_structured_monitoring_plan", deploy_structured_monitoring_plan)
+    builder.add_node("reccomend_dashboards", reccomend_dashboards)
 
     # EDGES
     # Pod Scanning and Workflow Identification Phase
@@ -424,7 +458,8 @@ def build_graph() -> StateGraph:
         route_after_confirmation,
         {True: "deploy_structured_monitoring_plan", False: END},
     )
-    builder.add_edge("deploy_structured_monitoring_plan", END)
+    builder.add_edge("deploy_structured_monitoring_plan", "reccomend_dashboards")
+    builder.add_edge("reccomend_dashboards", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
