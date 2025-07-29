@@ -3,6 +3,7 @@ from . import tools, models, prompts
 from .utils import print_utils, agent_utils, workload_utils
 from .config import K8S_CONFIG_PATH, MAX_EVALUATION_ROUNDS, OSS_WORKLOAD_EMOJI
 from .instructions import MonitoringInstruction
+from .deployment.controller import InstructionController
 from printer import printer
 from pydantic import BaseModel
 from langgraph.types import interrupt
@@ -340,29 +341,26 @@ def deploy_structured_monitoring_plan(workflow: Workflow) -> dict[str, bool]:
     if not workflow.monitoring_plan or not workflow.monitoring_plan.structured_plan:
         printer.error("No structured monitoring plan found to deploy.")
         return {"deployment_success": False}
-
-    printer.info(f"Deploying {len(workflow.monitoring_plan.structured_plan)} instructions...")
     
-    # Here you would implement the actual deployment logic
-    # For now, we just simulate a successful deployment
-    try:
-        for i, instruction in enumerate(workflow.monitoring_plan.structured_plan, 1):
-            printer.info(f"[{i}/{len(workflow.monitoring_plan.structured_plan)}] Executing {instruction}")
-            # Simulate deployment steps based on instruction type
-            # if isinstance(instruction, KubectlInstruction):
-            #     # Execute kubectl command: instruction.command
-            # elif isinstance(instruction, HelmInstruction):
-            #     # Execute helm command: instruction.command
-            # elif isinstance(instruction, CreateFileInstruction):
-            #     # Create file: instruction.filename with content: instruction.content
-            # elif isinstance(instruction, OtherInstruction):
-            #     # Handle other instruction: instruction.description, instruction.content
-            
-        printer.success("🚀 Structured monitoring plan deployed successfully!")
-        return {"deployment_success": True}
-    except Exception as e:
-        printer.error(f"Deployment failed: {str(e)}")
+    controller = InstructionController()
+    if controller.check_prerequisites():
+        controller.set_instructions(workflow.monitoring_plan.structured_plan)
+        printer.info(f"Deploying structured monitoring plan for {workflow.verified_oss_workload.name}...")
+        success = controller.execute_plan(delete=False)
+    else:
+        workflow.deployment_success = False
+        printer.error("Failed to meet prerequisites for deployment.")
         return {"deployment_success": False}
+
+    if success:
+        workflow.deployment_success = True
+        printer.success("Structured monitoring plan deployed successfully.")
+        return {"deployment_success": True}
+    else:
+        workflow.deployment_success = False
+        printer.error("Failed to deploy structured monitoring plan.")
+        return {"deployment_success": False}
+
 
 def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     """Recommend dashboards based on the structured monitoring plan."""
