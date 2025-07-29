@@ -186,8 +186,25 @@ def preprocess_markdown(content) -> str:
     
    doc.children = filtered_children
 
-   # get the content back as a string
-   return MarkdownRenderer().render(doc)
+   # Simple approach: create a fresh renderer each time to avoid concurrency issues
+   max_retries = 3
+   for attempt in range(max_retries):
+       try:
+           renderer = MarkdownRenderer()
+           return renderer.render(doc)
+       except ValueError as e:
+           if "list.remove(x): x not in list" in str(e):
+               printer.warning(f"MarkdownRenderer failed on attempt {attempt + 1}, retrying...")
+               if attempt == max_retries - 1:
+                   # Final fallback: return original content
+                   printer.warning("MarkdownRenderer completely failed after retries, returning original content")
+                   return content
+               continue
+           else:
+               raise e
+       except Exception as e:
+           printer.error(f"Unexpected error in MarkdownRenderer: {str(e)}")
+           return content
 
 def generate_workload_detection_analysis_prompt(workloads: dict[str, k8s.client.Workload]) -> str:
     analysis_prompt = """Please analyze the following Kubernetes workloads (services) and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.
