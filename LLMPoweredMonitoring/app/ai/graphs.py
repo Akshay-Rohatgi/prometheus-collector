@@ -11,7 +11,6 @@ from langgraph.graph import StateGraph
 from langgraph.constants import START, END
 from langgraph.checkpoint.memory import MemorySaver
 
-
 class MonitoringPlan(BaseModel):
     markdown_plan: str = None
     structured_plan: list[MonitoringInstruction] = None
@@ -473,4 +472,7 @@ def build_graph() -> StateGraph:
     return graph
 
 
-graph = build_graph()
+# Don't create a global graph - create a new one for each workflow
+def get_graph():
+    """Get a new graph instance for each workflow to avoid thread conflicts"""
+    return build_graph()
