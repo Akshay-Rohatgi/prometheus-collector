@@ -1,0 +1,51 @@
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  name: llm-powered-monitoring
+  namespace: llm-powered-monitoring
+  labels:
+    app: llm-powered-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-powered-monitoring
+  template:
+    metadata:
+      labels:
+        app: llm-powered-monitoring
+    spec:
+      serviceAccountName: llm-powered-monitoring-sa
+      containers:
+      - name: llm-powered-monitoring
+        image: your-registry/llm-powered-monitoring:latest
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: openai-secrets
+          mountPath: /app/ai/.env
+          readOnly: true
+        - name: github-secrets
+          mountPath: /app/ai/utils/.env
+          readOnly: true
+      volumes:
+      - name: openai-secrets
+        secret:
+          secretName: openai-secrets
+      - name: github-secrets
+        secret:
+          secretName: github-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-powered-monitoring-service
+  namespace: llm-powered-monitoring
+spec:
+  selector:
+    app: llm-powered-monitoring
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP

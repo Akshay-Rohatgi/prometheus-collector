@@ -35,10 +35,10 @@ class Workload(BaseModel):
 
 class K8sClient:
     def __init__(self, kube_config: str = None):
-        if kube_config:
-            config.load_kube_config(kube_config)
-        else:
+        if kube_config is None or kube_config == "":
             config.load_incluster_config()
+        else:
+            config.load_kube_config(kube_config)
     
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1Api()
