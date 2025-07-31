@@ -18,15 +18,15 @@ spec:
       serviceAccountName: llm-powered-monitoring-sa
       containers:
       - name: llm-powered-monitoring
-        image: your-registry/llm-powered-monitoring:latest
+        image: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:llm-powered-monitoring-0
         ports:
         - containerPort: 8000
         volumeMounts:
         - name: openai-secrets
-          mountPath: /app/ai/.env
+          mountPath: /app/ai/env
           readOnly: true
         - name: github-secrets
-          mountPath: /app/ai/utils/.env
+          mountPath: /app/ai/utils/env
           readOnly: true
       volumes:
       - name: openai-secrets
