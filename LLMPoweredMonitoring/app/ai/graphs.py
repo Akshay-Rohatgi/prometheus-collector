@@ -365,8 +365,22 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     """Recommend dashboards based on the structured monitoring plan."""
     if not workflow.monitoring_plan or not workflow.monitoring_plan.structured_plan:
         printer.error("No structured monitoring plan found to recommend dashboards.")
-        return {"dashboards": {}}
+        return {"recommended_dashboards": {}}
 
+    # Add interrupt to allow API query for dashboard recommendations
+    get_recommendations = interrupt({
+        "message": "Ready to generate dashboard recommendations. Call the API endpoint to proceed.",
+        "workload_name": workflow.verified_oss_workload.name if workflow.verified_oss_workload else "Unknown",
+        "monitoring_plan": workflow.monitoring_plan.markdown_plan
+    })
+
+    # If user chooses not to get recommendations, return empty dict
+    if not get_recommendations:
+        printer.info("Dashboard recommendations skipped.")
+        return {"recommended_dashboards": {}}
+
+    recommended_dashboards = {}
+    add_recommended_dashboard = tools.create_add_recommended_dashboard_tool(recommended_dashboards)
 
     analysis_prompt = f"""You need to recommend Grafana dashboards based on the monitoring plan for {workflow.verified_oss_workload.name}.
 
@@ -377,7 +391,7 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
         model=models.llm_41,
-        tools=[],
+        tools=[add_recommended_dashboard],
         agent_prompt=prompts.FIND_GRAFANA_DASHBOARD_PROMPT
     )
     
@@ -388,9 +402,8 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
             printer.out(response_content)
         else:
             printer.warning("Agent response was empty, no dashboards recommended.")
-
-    recommended_dashboards = {"test": 1234}  # Placeholder for actual dashboard recommendations
-    return {"dashboards": recommended_dashboards}
+    print(f"Recommended Dashboards: {recommended_dashboards}")
+    return {"recommended_dashboards": recommended_dashboards}
 
 # routers
 def route_before_planning(workflow: Workflow) -> bool:
@@ -462,7 +475,7 @@ def build_graph() -> StateGraph:
     builder.add_conditional_edges(
         "confirm_automated_monitoring_deployment",
         route_after_confirmation,
-        {True: "deploy_structured_monitoring_plan", False: END},
+        {True: "deploy_structured_monitoring_plan", False: "reccomend_dashboards"},
     )
     builder.add_edge("deploy_structured_monitoring_plan", "reccomend_dashboards")
     builder.add_edge("reccomend_dashboards", END)

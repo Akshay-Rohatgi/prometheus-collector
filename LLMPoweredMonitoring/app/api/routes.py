@@ -261,15 +261,14 @@ async def confirm_deployment_of_monitoring_plan(thread_id: str, request: confirm
             )
 
             if result.get("deployment_success"):
-                # Workflow completed successfully, update status
-                status.active = False
-                status.phase = "completed"
-                # Clean up the graph instance
-                await cleanup_workflow_graph(thread_id)
+                # Move to dashboard recommendation phase instead of completing
+                status.phase = "dashboard-recommendation"
+                
                 return {
                     "message": "Structured monitoring plan deployed successfully",
                     "status": "deployed",
-                    "deployment_success": result.get("deployment_success")
+                    "deployment_success": result.get("deployment_success"),
+                    "next_phase": "dashboard-recommendation"
                 }
             else:
                 status.active = False
@@ -282,14 +281,27 @@ async def confirm_deployment_of_monitoring_plan(thread_id: str, request: confirm
             await cleanup_workflow_graph(thread_id)
             raise HTTPException(status_code=500, detail=f"Error confirming deployment: {str(e)}")
     else:
-        # User rejected deployment, end workflow
-        # Get workflow-specific graph instance for cleanup
-        workflow_graph = await get_workflow_graph(thread_id)
-        await asyncio.to_thread(workflow_graph.invoke, Command(resume=False), status.config)
-        status.active = False
-        status.phase = "cancelled"
-        await cleanup_workflow_graph(thread_id)
-        return {"message": "Deployment of structured monitoring plan not confirmed, workflow stopped"}
+        # User rejected deployment, but continue to dashboard recommendations
+        try:
+            # Get workflow-specific graph instance
+            workflow_graph = await get_workflow_graph(thread_id)
+            
+            # Continue workflow without deployment
+            result = await asyncio.to_thread(workflow_graph.invoke, Command(resume=False), status.config)
+            
+            # Should now be in dashboard-recommendation phase
+            status.phase = "dashboard-recommendation"
+            
+            return {
+                "message": "Deployment skipped, proceeding to dashboard recommendations",
+                "status": "deployment-skipped",
+                "next_phase": "dashboard-recommendation"
+            }
+        except Exception as e:
+            status.active = False
+            status.phase = "failed"
+            await cleanup_workflow_graph(thread_id)
+            raise HTTPException(status_code=500, detail=f"Error proceeding to dashboard recommendations: {str(e)}")
 
 @app.delete("/workflow/{thread_id}")
 async def delete_workflow(thread_id: str):
@@ -313,3 +325,66 @@ async def delete_all_workflows():
     async with _graphs_lock:
         _workflow_graphs.clear()
     return {"message": f"All {count} workflows deleted successfully"}
+
+# =========================================================
+
+class getDashboardRecommendationsRequest(BaseModel):
+    get_recommendations: bool
+
+@app.post("/get_dashboard_recommendations/{thread_id}")
+async def get_dashboard_recommendations(thread_id: str, request: getDashboardRecommendationsRequest):
+    """Get Grafana dashboard recommendations for the deployed monitoring plan"""
+    # Get the workflow status for this specific thread
+    async with _workflows_lock:
+        status = _workflows.get(thread_id)
+    
+    if not status or not status.active:
+        raise HTTPException(status_code=400, detail="No active workflow found for this thread_id")
+    
+    if status.phase != "dashboard-recommendation":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Workflow is not in dashboard-recommendation phase. Current phase: {status.phase}"
+        )
+
+    try:
+        if request.get_recommendations:
+            printer.info(f"Generating dashboard recommendations for {thread_id}")
+        else:
+            printer.info(f"Skipping dashboard recommendations for {thread_id}")
+        
+        # Get workflow-specific graph instance
+        workflow_graph = await get_workflow_graph(thread_id)
+        
+        # Resume the workflow with user's choice
+        result = await asyncio.to_thread(
+            workflow_graph.invoke,
+            Command(resume=request.get_recommendations),
+            status.config
+        )
+
+        # Workflow completed successfully, update status
+        status.active = False
+        status.phase = "completed"
+        # Clean up the graph instance
+        await cleanup_workflow_graph(thread_id)
+        
+        if request.get_recommendations:
+            recommended_dashboards = result.get("recommended_dashboards", {})
+            return {
+                "message": "Dashboard recommendations generated successfully",
+                "recommended_dashboards": recommended_dashboards,
+                "status": "completed"
+            }
+        else:
+            return {
+                "message": "Dashboard recommendations skipped, workflow completed",
+                "status": "completed"
+            }
+
+    except Exception as e:
+        status.active = False
+        status.phase = "failed"
+        await cleanup_workflow_graph(thread_id)
+        error_message = f"Error processing dashboard recommendations: {str(e)}"
+        raise HTTPException(status_code=500, detail=error_message)

@@ -6,6 +6,14 @@ from printer import printer
 from typing import Dict
 from mistletoe import Document
 from mistletoe.markdown_renderer import MarkdownRenderer
+import threading
+
+# Global lock to serialize mistletoe usage (mistletoe is not thread-safe)
+_MD_LOCK = threading.Lock()
+
+# Regex to match markdown headers (e.g., #, ##, ### Title)
+_SECTION_MATCH = re.compile(r'^(#{1,6})\s+(.*)$')
+
 
 def _flatten_dict(data: dict, parent_key: str = '', separator: str = '.') -> dict:
     """Flatten a nested dictionary using dot notation."""
@@ -122,6 +130,26 @@ def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
         return f"Added {workload_name} to the detected OSS workloads list"
     return add_oss_workload
 
+def create_add_recommended_dashboard_tool(recommended_dashboards: dict) -> callable:
+    """Create a function to add a recommended dashboard."""
+    def add_recommended_dashboard(dashboard_name: str, dashboard_id: int) -> str:
+        """Add a recommended Grafana dashboard to the list.
+        
+        Use this tool to recommend specific Grafana dashboards that would be useful for monitoring
+        the workload based on the monitoring plan. Include the dashboard name and its ID.
+        
+        Args:
+            dashboard_name: The name/title of the Grafana dashboard (e.g., "Kafka Exporter Overview")
+            dashboard_id: The Grafana dashboard ID (e.g., 7589)
+        
+        Returns:
+            Confirmation message that the dashboard was added
+        """
+        recommended_dashboards[dashboard_name] = dashboard_id
+        return f"Added recommended dashboard: {dashboard_name} (ID: {dashboard_id})"
+    return add_recommended_dashboard
+
+
 def create_add_instruction(instruction_list: list) -> callable:
     """Create the add_instruction tool function."""
     def add_instruction(type: str, content: str, filename: str = None) -> str:
@@ -150,61 +178,64 @@ def create_add_instruction(instruction_list: list) -> callable:
         return f"Added instruction: {instruction}"
     return add_instruction
 
-def preprocess_markdown(content) -> str:
-   doc = Document(content)
-   
-   # Walk the AST and filter out unwanted sections
-   filtered_children = []
-   skip_until_next_header = False
-   skip_level = None
-   
-   for child in doc.children:
-      if hasattr(child, 'level'):  # This is a header
-         current_level = child.level
-         
-         # If we're currently skipping, check if this header ends the skip
-         if skip_until_next_header:
-            if current_level <= skip_level:
-               # This header is same level or higher, stop skipping
-               skip_until_next_header = False
-               skip_level = None
-            else:
-               # This header is lower level, continue skipping
-               continue
-         
-         # Check if this header should start a skip section
-         if hasattr(child, 'children'):
-            header_text = ''.join(token.content for token in child.children if hasattr(token, 'content'))
-            if any(word in header_text.lower() for word in ['optional', 'references']):
-               skip_until_next_header = True
-               skip_level = current_level
-               continue  # Skip this header entirely
-      
-      # If we're not skipping, include this content
-      if not skip_until_next_header:
-         filtered_children.append(child)
-    
-   doc.children = filtered_children
+def _strip_sections_by_header(content: str, banned=("optional", "references")) -> str:
+    """Remove sections whose header contains any banned keyword.
 
-   # Simple approach: create a fresh renderer each time to avoid concurrency issues
-   max_retries = 3
-   for attempt in range(max_retries):
-       try:
-           renderer = MarkdownRenderer()
-           return renderer.render(doc)
-       except ValueError as e:
-           if "list.remove(x): x not in list" in str(e):
-               printer.warning(f"MarkdownRenderer failed on attempt {attempt + 1}, retrying...")
-               if attempt == max_retries - 1:
-                   # Final fallback: return original content
-                   printer.warning("MarkdownRenderer completely failed after retries, returning original content")
-                   return content
-               continue
-           else:
-               raise e
-       except Exception as e:
-           printer.error(f"Unexpected error in MarkdownRenderer: {str(e)}")
-           return content
+    Thread-safe and deterministic; does not rely on markdown parsers.
+    """
+    if not content:
+        return content
+
+    lines = content.splitlines()
+    out = []
+    skip = False
+    skip_level = 0
+
+    for raw in lines:
+        line = raw.rstrip("\n")
+        m = _SECTION_MATCH.match(line.strip())
+        if m:
+            level = len(m.group(1))
+            title = m.group(2).strip().lower()
+
+            # If we were skipping and hit a header at same or higher level, stop skipping
+            if skip and level <= skip_level:
+                skip = False
+                skip_level = 0
+
+            # If not skipping, decide whether to start skipping this section
+            if not skip and any(b in title for b in banned):
+                skip = True
+                skip_level = level
+                continue  # Do not include the banned header line itself
+
+        if not skip:
+            out.append(line)
+
+    return "\n".join(out)
+
+def preprocess_markdown(content) -> str:
+    """Preprocess markdown in a thread-safe way.
+
+    - First, remove banned sections via simple header-based filtering.
+    - Then, optionally normalize via mistletoe under a global lock.
+    - On any failure, fall back to the filtered text.
+    """
+    if not content:
+        return content
+
+    # 1) Deterministic, thread-safe filter (no parser involved)
+    filtered = _strip_sections_by_header(content)
+
+    # 2) Optional normalization guarded by a global lock (mistletoe is not thread-safe)
+    try:
+        with _MD_LOCK:
+            doc = Document(filtered)
+            renderer = MarkdownRenderer()
+            return renderer.render(doc)
+    except Exception as e:
+        printer.warning(f"Markdown normalization failed ({e}); using filtered text")
+        return filtered
 
 def generate_workload_detection_analysis_prompt(workloads: dict[str, k8s.client.Workload]) -> str:
     analysis_prompt = """Please analyze the following Kubernetes workloads (services) and identify which ones are major, first-class OSS workloads suitable for Prometheus monitoring.

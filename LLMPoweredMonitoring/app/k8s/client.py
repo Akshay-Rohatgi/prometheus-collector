@@ -144,6 +144,7 @@ def detect_workloads(k8s_client: K8sClient) -> List[Workload]:
     Detect workloads in the Kubernetes cluster.
     This function retrieves all deployments and creates Workload objects.
     """
+    # prin the current cluster name
     namespaces = tools.get_relevant_namespaces(k8s_client)
     # deployments = tools.get_deployments(k8s_client, namespaces)
     services = tools.get_services(k8s_client, namespaces)

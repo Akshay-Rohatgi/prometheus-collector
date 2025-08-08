@@ -152,9 +152,37 @@ if approve_plan == "yes" or len(approve_plan) == 0:
             else:
                 client_print(f"❌ Error during deployment confirmation: {deployment_response.json()}")
         else:
-            # Send rejection to stop the workflow
+            # Send rejection to stop the automated deployment but continue to dashboard recommendations
             requests.post(f"{BASE_URL}/confirm_deployment_of_monitoring_plan/{thread_id}", json={"approval": False})
             client_print("❌ Automated monitoring deployment cancelled.")
+        
+        # Check if we're now in dashboard-recommendation phase (regardless of deployment choice)
+        status = check_workflow_status(thread_id)
+        if status and status.get('phase') == 'dashboard-recommendation':
+            client_print("\n📊 Dashboard Recommendation Phase")
+            get_dashboards = input("Would you like to get Grafana dashboard recommendations? (yes/no): ").strip().lower()
+            
+            dashboard_response = requests.post(
+                f"{BASE_URL}/get_dashboard_recommendations/{thread_id}", 
+                json={"get_recommendations": get_dashboards == "yes" or len(get_dashboards) == 0}
+            )
+            
+            if dashboard_response.status_code == 200:
+                dashboard_result = dashboard_response.json()
+                client_print(f"✅ {dashboard_result['message']}")
+                
+                if dashboard_result.get("recommended_dashboards"):
+                    client_print("\n🎯 Recommended Grafana Dashboards:")
+                    console.print("─" * 60)
+                    for dashboard_name, dashboard_id in dashboard_result["recommended_dashboards"].items():
+                        console.print(f"  📊 [bold cyan]{dashboard_name}[/bold cyan]")
+                        console.print(f"      [dim]Dashboard ID: [/dim][bright_yellow]{dashboard_id}[/bright_yellow]")
+                        console.print(f"      [dim]URL: [/dim][link]https://grafana.com/grafana/dashboards/{dashboard_id}[/link]")
+                        console.print()
+                    client_print("💡 You can import these dashboards into your Grafana instance using their IDs.")
+            else:
+                client_print(f"❌ Error getting dashboard recommendations: {dashboard_response.json()}")
+                    
     else:
         client_print("❌ No structured plan available for deployment.")
 else:
