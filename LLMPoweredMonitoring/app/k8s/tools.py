@@ -1,7 +1,10 @@
 from typing import List, Dict
 from .client import K8sClient, Workload
 from printer import printer
+from logs import get_logger
 import re
+
+logger = get_logger(__name__)
 
 def get_namespaces(k8s_client: K8sClient) -> List[Dict]:
     namespaces = k8s_client.core_api.list_namespace()
@@ -24,6 +27,10 @@ def prune_namespaces(k8s_client: K8sClient, namespaces: List[Dict]) -> List[Dict
         labels = get_labels_for_namespace(k8s_client, namespace["metadata"]["name"])
         if labels.get("kubernetes.azure.com/managedby") == "aks":
             printer.out(f"❌ Skipping namespace {namespace['metadata']['name']} due to Azure management")
+            logger.info(f"Skipping namespace {namespace['metadata']['name']} due to Azure management", extra={
+                'component': 'k8s_tools',
+                'operation': 'prune_namespaces',
+            })
             continue
         pruned_namespaces.append(namespace)
 
@@ -73,10 +80,20 @@ def filter_services_by_blacklist(service: List[Dict], deployment_blacklist: set,
         
         # skip blacklisted namespaces
         if namespace in namespace_blacklist:
+            printer.out(f"❌ Skipping service {name} in blacklisted namespace {namespace}")
+            logger.info(f"Skipping service {name} in blacklisted namespace {namespace}", extra={
+                'component': 'k8s_tools',
+                'operation': 'filter_services_by_blacklist',
+            })
             continue
             
         # skip if name contains any blacklisted terms
         if any(blacklisted in name for blacklisted in deployment_blacklist):
+            printer.out(f"❌ Skipping service {name} due to blacklisted term")
+            logger.info(f"Skipping service {name} due to blacklisted term", extra={
+                'component': 'k8s_tools',
+                'operation': 'filter_services_by_blacklist',
+            })
             continue
 
         candidates.append(svc)

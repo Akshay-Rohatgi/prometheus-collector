@@ -9,7 +9,7 @@ def banner(message: str):
     rich.print(f"[bold blue] === {message} === [/bold blue]")
 
 def info(message: str):
-    """Prints a message to the console using rich."""
+    """Prints an info message to the console using rich."""
     rich.print(f"ℹ️  {message}")
     
 def error(message: str):

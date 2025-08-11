@@ -2,6 +2,11 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from kubernetes import client, config
 from printer import printer
+from logs import get_logger, log_with_context
+import time
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # class Workload(BaseModel):
 #     name: str
@@ -35,15 +40,33 @@ class Workload(BaseModel):
 
 class K8sClient:
     def __init__(self, kube_config: str = None):
-        if kube_config is None or kube_config == "":
-            config.load_incluster_config()
-        else:
-            config.load_kube_config(kube_config)
-    
-        self.core_api = client.CoreV1Api()
-        self.apps_api = client.AppsV1Api()
-        self.batch_api = client.BatchV1Api()
-        self.custom_objects_api = client.CustomObjectsApi()
+        logger.info("Initializing Kubernetes client", extra={
+            'component': 'k8s_client',
+            'operation': 'init',
+            'config_type': 'in-cluster' if kube_config is None else 'file'
+        })
+        
+        try:
+            if kube_config is None or kube_config == "":
+                config.load_incluster_config()
+            else:
+                config.load_kube_config(kube_config)
+        
+            self.core_api = client.CoreV1Api()
+            self.apps_api = client.AppsV1Api()
+            self.batch_api = client.BatchV1Api()
+            self.custom_objects_api = client.CustomObjectsApi()
+            
+            logger.info("Kubernetes client initialized successfully", extra={
+                'component': 'k8s_client',
+                'operation': 'init'
+            })
+        except Exception as e:
+            logger.error(f"Failed to initialize Kubernetes client: {e}", extra={
+                'component': 'k8s_client',
+                'operation': 'init_error'
+            })
+            raise
 
 
 def filter_deployments(deployments: List[Dict]) -> List[Dict]:
@@ -144,25 +167,61 @@ def detect_workloads(k8s_client: K8sClient) -> List[Workload]:
     Detect workloads in the Kubernetes cluster.
     This function retrieves all deployments and creates Workload objects.
     """
-    # prin the current cluster name
-    namespaces = tools.get_relevant_namespaces(k8s_client)
-    # deployments = tools.get_deployments(k8s_client, namespaces)
-    services = tools.get_services(k8s_client, namespaces)
-    # printer.out(services)
-
-    if not services:
-        printer.out("No services found in the cluster.")
-        return []
-
-    filtered_services = filter_services(services)
-
-    if not filtered_services:
-        printer.out("No relevant services found after filtering.")
-        return []
-
-    workloads = create_workloads(filtered_services)
+    start_time = time.time()
     
-    return workloads
+    logger.info("Starting workload detection", extra={
+        'component': 'k8s_client',
+        'operation': 'detect_workloads'
+    })
+    
+    try:
+        # Get the current cluster name
+        namespaces = tools.get_relevant_namespaces(k8s_client)
+        services = tools.get_services(k8s_client, namespaces)
+
+        if not services:
+            logger.warning("No services found in the cluster", extra={
+                'component': 'k8s_client',
+                'operation': 'detect_workloads',
+                'services_count': 0
+            })
+            printer.out("No services found in the cluster.")
+            return []
+
+        filtered_services = filter_services(services)
+
+        if not filtered_services:
+            logger.warning("No relevant services found after filtering", extra={
+                'component': 'k8s_client',
+                'operation': 'detect_workloads',
+                'services_after_filter': 0
+            })
+            printer.out("No relevant services found after filtering.")
+            return []
+
+        workloads = create_workloads(filtered_services)
+        
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        logger.info("Workload detection completed successfully", extra={
+            'component': 'k8s_client',
+            'operation': 'detect_workloads',
+            'duration_ms': duration_ms,
+            'namespaces_checked': len(namespaces),
+            'services_found': len(services),
+            'services_after_filter': len(filtered_services),
+            'workloads_created': len(workloads)
+        })
+        
+        return workloads
+        
+    except Exception as e:
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"Workload detection failed: {e}", extra={
+            'component': 'k8s_client',
+            'operation': 'detect_workloads',
+            'duration_ms': duration_ms
+        })
+        raise
 
 def verify_workloads(k8s_client: K8sClient, workloads: List[Workload]):
     from . import tools

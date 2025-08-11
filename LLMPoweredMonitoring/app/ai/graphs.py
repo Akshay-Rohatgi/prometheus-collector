@@ -10,6 +10,11 @@ from langgraph.types import interrupt
 from langgraph.graph import StateGraph
 from langgraph.constants import START, END
 from langgraph.checkpoint.memory import MemorySaver
+from logs import get_logger, log_with_context
+import time
+
+# Initialize logger
+logger = get_logger(__name__)
 
 class MonitoringPlan(BaseModel):
     markdown_plan: str = None
@@ -41,58 +46,135 @@ class Workflow(BaseModel):
 
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
-    client = k8s_client.K8sClient(K8S_CONFIG_PATH)
-    detected_workloads = k8s_client.detect_workloads(client)
+    start_time = time.time()
     
-    detected_workloads_dict = {
-        workload.name.lower(): workload for workload in detected_workloads
-    }
-    print_utils.print_workload_list("Detected Workloads", detected_workloads_dict)
+    logger.info("Starting workload detection", extra={
+        'component': 'ai_graphs',
+        'operation': 'detect_workloads',
+        'workflow_phase': 'workload-detection'
+    })
     
-    return {"detected_workloads": detected_workloads_dict}
+    try:
+        client = k8s_client.K8sClient(K8S_CONFIG_PATH)
+        detected_workloads = k8s_client.detect_workloads(client)
+        
+        detected_workloads_dict = {
+            workload.name.lower(): workload for workload in detected_workloads
+        }
+        
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        logger.info("Workload detection completed", extra={
+            'component': 'ai_graphs',
+            'operation': 'detect_workloads',
+            'workflow_phase': 'workload-detection',
+            'duration_ms': duration_ms,
+            'workloads_detected': len(detected_workloads_dict)
+        })
+        
+        print_utils.print_workload_list("Detected Workloads", detected_workloads_dict)
+        
+        return {"detected_workloads": detected_workloads_dict}
+        
+    except Exception as e:
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"Workload detection failed: {e}", extra={
+            'component': 'ai_graphs',
+            'operation': 'detect_workloads',
+            'workflow_phase': 'workload-detection',
+            'duration_ms': duration_ms
+        })
+        raise
 
 
 def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect OSS workloads using an AI agent based on the detected workloads."""
-    detected_oss_workload_names = []
-    add_oss_workload = tools.create_add_oss_workload_tool(detected_oss_workload_names)
+    start_time = time.time()
+    
+    logger.info("Starting OSS workload detection", extra={
+        'component': 'ai_graphs',
+        'operation': 'detect_oss_workloads',
+        'workflow_phase': 'oss-detection',
+        'input_workloads': len(workflow.detected_workloads or {})
+    })
+    
+    try:
+        detected_oss_workload_names = []
+        add_oss_workload = tools.create_add_oss_workload_tool(detected_oss_workload_names)
 
-    analysis_prompt = tools.generate_workload_detection_analysis_prompt(
-        workflow.detected_workloads
-    )
-    
-    response, _ = agent_utils.AgentManager.create_and_run_agent(
-        prompt=analysis_prompt,
-        tools=[add_oss_workload],
-        agent_prompt=prompts.NEW_OSS_DETECTION_PROMPT
-    )
-    
-    if response:
-        response_content = agent_utils.AgentManager.get_agent_response_content(response)
-        if response_content:
-            printer.out(response_content)
+        analysis_prompt = tools.generate_workload_detection_analysis_prompt(
+            workflow.detected_workloads
+        )
+        
+        response, _ = agent_utils.AgentManager.create_and_run_agent(
+            prompt=analysis_prompt,
+            tools=[add_oss_workload],
+            model=models.llm_4o,
+            agent_prompt=prompts.NEW_OSS_DETECTION_PROMPT
+        )
+        
+        if response:
+            response_content = agent_utils.AgentManager.get_agent_response_content(response)
+            if response_content:
+                printer.out(response_content)
 
-        detected_oss_workloads = workload_utils.filter_workloads(
-            workflow.detected_workloads, 
-            detected_oss_workload_names
-        )
-        print_utils.print_workload_list(
-            "Detected OSS Workloads", 
-            detected_oss_workloads, 
-            OSS_WORKLOAD_EMOJI
-        )
-        return {"detected_oss_workloads": detected_oss_workloads}
-    
-    return {"detected_oss_workloads": {}}
+            detected_oss_workloads = workload_utils.filter_workloads(
+                workflow.detected_workloads, 
+                detected_oss_workload_names
+            )
+            
+            duration_ms = round((time.time() - start_time) * 1000, 2)
+            logger.info("OSS workload detection completed", extra={
+                'component': 'ai_graphs',
+                'operation': 'detect_oss_workloads',
+                'workflow_phase': 'oss-detection',
+                'duration_ms': duration_ms,
+                'oss_workloads_detected': len(detected_oss_workloads)
+            })
+            
+            print_utils.print_workload_list(
+                "Detected OSS Workloads", 
+                detected_oss_workloads, 
+                OSS_WORKLOAD_EMOJI
+            )
+            return {"detected_oss_workloads": detected_oss_workloads}
+        
+        logger.warning("No OSS workloads detected by AI agent", extra={
+            'component': 'ai_graphs',
+            'operation': 'detect_oss_workloads',
+            'workflow_phase': 'oss-detection'
+        })
+        return {"detected_oss_workloads": {}}
+        
+    except Exception as e:
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        logger.error(f"OSS workload detection failed: {e}", extra={
+            'component': 'ai_graphs',
+            'operation': 'detect_oss_workloads',
+            'workflow_phase': 'oss-detection',
+            'duration_ms': duration_ms
+        })
+        raise
 
 
 def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """User selects which OSS workload to monitor from the detected OSS workloads."""
+    logger.info("User selection required for OSS workload", extra={
+        'component': 'ai_graphs',
+        'operation': 'select_oss_workloads',
+        'workflow_phase': 'workload-selection',
+        'available_workloads': len(workflow.detected_oss_workloads or {})
+    })
+    
     selected_workload_name = interrupt(
         {"detected_oss_workloads": list(workflow.detected_oss_workloads.keys())}
     )
 
     if not selected_workload_name:
+        logger.warning("No workload selected by user", extra={
+            'component': 'ai_graphs',
+            'operation': 'select_oss_workloads',
+            'workflow_phase': 'workload-selection'
+        })
         return {"selected_oss_workload": None}
 
     # Since we're selecting only one workload, get the first one from the list
@@ -132,9 +214,17 @@ def confirmation_before_planning(workflow: Workflow) -> dict[str, bool]:
 
 def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, MonitoringPlan]:
     """Generate a monitoring deployment plan using an AI agent."""
+    start_time = time.time()
     
     # Check if we have a verified workload
     if not workflow.verified_oss_workload:
+        # Log missing workload error (system event)
+        logger.error("Monitoring plan generation attempted without verified workload", extra={
+            'component': 'ai_graphs',
+            'operation': 'generate_monitoring_deployment_plan',
+            'workflow_phase': 'monitoring-plan-generation',
+            'error': 'no_verified_workload'
+        })
         printer.error("No verified OSS workload found to generate monitoring plan for.")
         return {"monitoring_plan": None}
     
@@ -142,11 +232,22 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
 
     # Determine if this is an improvement iteration
     is_improvement = (workflow.monitoring_plan_feedback is not None and workflow.monitoring_plan_feedback.round_count > 0)
+    round_number = workflow.monitoring_plan_feedback.round_count if workflow.monitoring_plan_feedback else 1
+
+    # Log plan generation start (system event)
+    logger.info("Monitoring plan generation started", extra={
+        'component': 'ai_graphs',
+        'operation': 'generate_monitoring_deployment_plan',
+        'workflow_phase': 'monitoring-plan-generation',
+        'workload_name': workload.name,
+        'is_improvement': is_improvement,
+        'round_number': round_number
+    })
 
     message = "Improving" if is_improvement else "Generating"
     printer.info(
         f"{message} monitoring deployment plan for {workload.name}"
-        + (f" (Round {workflow.monitoring_plan_feedback.round_count})" if is_improvement else "")
+        + (f" (Round {round_number})" if is_improvement else "")
     )
 
     # Prepare the analysis prompt based on whether this is an improvement iteration
@@ -173,9 +274,10 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     else:
         analysis_prompt = tools.generate_monitoring_plan_prompt(workload)
 
-    # Run the optimizer agent
+    # Run the generation agent
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
+        model=models.llm_4o,
         tools=[tools.get_chart_yaml_version, tools.get_values_yaml_formatted, tools.get_chart_readme, tools.search_values_keys],
         agent_prompt=prompts.NEW_MONITORING_PLAN_GENERATION_PROMPT
     )
@@ -250,6 +352,7 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Run the critic agent
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=evaluation_prompt,
+        model=models.llm_4o,
         agent_prompt=prompts.MONITORING_PLAN_EVALUATOR_PROMPT
     )
     
@@ -304,7 +407,7 @@ def structure_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monito
 
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_41,
+        model=models.llm_4o,
         tools=[add_instruction],
         agent_prompt=prompts.STRUCTURE_MONITORING_PLAN_PROMPT
     )
@@ -390,7 +493,7 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     """
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_41,
+        model=models.llm_5_mini,
         tools=[add_recommended_dashboard],
         agent_prompt=prompts.FIND_GRAFANA_DASHBOARD_PROMPT
     )

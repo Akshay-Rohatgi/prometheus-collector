@@ -2,11 +2,16 @@ from ai.graphs import get_graph
 from core import workflow
 from pydantic import BaseModel
 from langgraph.types import Command
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from printer import printer
 import uuid
 import asyncio
+import time
 from typing import Dict
+from logs import get_logger, log_with_context
+
+# Initialize logger
+logger = get_logger(__name__)
 
 app = FastAPI()
 
@@ -17,6 +22,37 @@ _workflows_lock = asyncio.Lock()
 # Store graph instances per workflow to avoid checkpoint conflicts
 _workflow_graphs: Dict[str, any] = {}
 _graphs_lock = asyncio.Lock()
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log HTTP requests with meaningful system information."""
+    start_time = time.time()
+    
+    # Log request start (system event)
+    logger.info("HTTP request received", extra={
+        'component': 'api',
+        'operation': 'request_start',
+        'method': request.method,
+        'path': str(request.url.path),
+        'client_ip': request.client.host if request.client else None,
+        'user_agent': request.headers.get('user-agent', 'unknown')
+    })
+    
+    response = await call_next(request)
+    
+    # Log request completion with metrics (system event)
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    logger.info("HTTP request completed", extra={
+        'component': 'api',
+        'operation': 'request_complete',
+        'method': request.method,
+        'path': str(request.url.path),
+        'status_code': response.status_code,
+        'duration_ms': duration_ms,
+        'response_size': response.headers.get('content-length', 'unknown')
+    })
+    
+    return response
 
 async def get_workflow_graph(thread_id: str):
     """Get or create a graph instance for a specific workflow"""
@@ -34,19 +70,46 @@ async def cleanup_workflow_graph(thread_id: str):
 
 @app.get("/")
 async def read_root():
+    # Simple endpoint - minimal logging needed
     return {"message": "Welcome to the LLM Powered Workload Monitoring API"}
 
 @app.get("/status/{thread_id}", response_model=workflow.WorkflowStatus)
 async def get_workflow_status(thread_id: str):
     async with _workflows_lock:
         status = _workflows.get(thread_id)
+    
     if not status:
+        # Log workflow lookup failure (system event)
+        logger.warning("Workflow status request for non-existent workflow", extra={
+            'component': 'api',
+            'operation': 'get_workflow_status',
+            'thread_id': thread_id,
+            'status': 'not_found'
+        })
         raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Log successful status retrieval (system event)
+    logger.info("Workflow status retrieved", extra={
+        'component': 'api',
+        'operation': 'get_workflow_status', 
+        'thread_id': thread_id,
+        'workflow_phase': status.phase,
+        'workflow_active': status.active
+    })
     return status
 
 @app.get("/workflows")
 async def list_workflows():
     """List all active workflows"""
+    async with _workflows_lock:
+        workflow_count = len(_workflows)
+    
+    # Log workflow listing (system event)
+    logger.info("Workflows listed", extra={
+        'component': 'api',
+        'operation': 'list_workflows',
+        'active_workflow_count': workflow_count
+    })
     async with _workflows_lock:
         return {
             "workflows": [
@@ -55,11 +118,17 @@ async def list_workflows():
             ]
         }
 
-# =========================================================
 @app.get("/start")
 async def start_workflow():
     # Generate a proper thread_id (not a tuple!)
     thread_id = str(uuid.uuid4())
+    
+    # Log workflow creation (system event)
+    logger.info("New workflow requested", extra={
+        'component': 'api',
+        'operation': 'start_workflow',
+        'thread_id': thread_id
+    })
     
     # Create new workflow status for this client
     status = workflow.WorkflowStatus(
@@ -79,6 +148,15 @@ async def start_workflow():
         status.phase = "workload-detection"
         status.config = config
         
+        # Log phase transition (system event)
+        logger.info("Workflow phase transition", extra={
+            'component': 'api',
+            'operation': 'phase_transition',
+            'thread_id': thread_id,
+            'from_phase': 'not-started',
+            'to_phase': 'workload-detection'
+        })
+        
         # Get workflow-specific graph instance
         workflow_graph = await get_workflow_graph(thread_id)
         
@@ -89,11 +167,27 @@ async def start_workflow():
             status.active = True
             status.phase = "workload-selection"
             
+            # Log workflow interruption for user selection (system event)
+            logger.info("Workflow interrupted for workload selection", extra={
+                'component': 'api',
+                'operation': 'workflow_interrupt',
+                'thread_id': thread_id,
+                'workflow_phase': 'workload-selection',
+                'detected_workloads': len(result["__interrupt__"][0].value.get("detected_oss_workloads", []))
+            })
+            
             return {
                 "thread_id": thread_id,
                 "detected_oss_workloads": result["__interrupt__"][0].value["detected_oss_workloads"],
             }
         else:
+            # Log workflow error (system event)
+            logger.error("Workflow did not return expected interrupt", extra={
+                'component': 'api',
+                'operation': 'workflow_error',
+                'thread_id': thread_id,
+                'result_keys': list(result.keys()) if isinstance(result, dict) else str(type(result))
+            })
             raise HTTPException(status_code=500, detail="Workflow did not return an interrupt")
 
     except HTTPException:
@@ -113,11 +207,33 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
         status = _workflows.get(thread_id)
     
     if not status or not status.active:
+        # Log invalid workflow request (system event)
+        logger.warning("OSS workload selection on inactive workflow", extra={
+            'component': 'api',
+            'operation': 'select_oss_workloads',
+            'thread_id': thread_id,
+            'workflow_exists': status is not None,
+            'workflow_active': status.active if status else False
+        })
         raise HTTPException(status_code=400, detail="No active workflow found for this thread_id")
 
     selected_workloads_names = request.selected_workloads
     if not selected_workloads_names:
+        logger.warning("Empty workload selection received", extra={
+            'component': 'api',
+            'operation': 'select_oss_workloads',
+            'thread_id': thread_id
+        })
         raise HTTPException(status_code=400, detail="No workloads selected")
+    
+    # Log workload selection (system event)
+    logger.info("OSS workloads selected", extra={
+        'component': 'api',
+        'operation': 'select_oss_workloads',
+        'thread_id': thread_id,
+        'selected_workloads': selected_workloads_names,
+        'workload_count': len(selected_workloads_names)
+    })
     
     printer.info(f"Selected OSS workloads for {thread_id}: {selected_workloads_names}")
     
@@ -133,8 +249,25 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
         )
         
         status.phase = "monitoring-plan-generation"
+        
+        # Log phase transition (system event)
+        logger.info("Workflow advanced to monitoring plan generation", extra={
+            'component': 'api',
+            'operation': 'select_oss_workloads',
+            'thread_id': thread_id,
+            'to_phase': 'monitoring-plan-generation'
+        })
+        
         return {"message": "Selected OSS workload successfully", "selected_oss_workload": selected_workloads_names}
     except Exception as e:
+        # Log workflow error (system event)
+        logger.error("Error processing workload selection", extra={
+            'component': 'api',
+            'operation': 'select_oss_workloads',
+            'thread_id': thread_id,
+            'error': str(e),
+            'selected_workloads': selected_workloads_names
+        })
         raise HTTPException(status_code=500, detail=f"Error selecting OSS workloads: {str(e)}")
 
 # =========================================================

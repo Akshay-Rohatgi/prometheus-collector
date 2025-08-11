@@ -3,11 +3,46 @@ from dotenv import load_dotenv
 from api import routes
 import uvicorn
 import uuid
+import logs
 
 
 def main():
+    # Initialize logging first
+    logs.setup_logging()
+    logger = logs.get_logger(__name__)
+    
+    # Log application startup (system event)
+    logger.info("Application startup initiated", extra={
+        'component': 'main',
+        'operation': 'startup',
+        'host': '0.0.0.0',
+        'port': 8000
+    })
+    
+    # User-facing welcome message (rich output)
     printer.info("Welcome to LLM Powered Workload Monitoring")
-    uvicorn.run(routes.app, host="0.0.0.0", port=8000)
+    
+    try:
+        # Log server start attempt
+        logger.info("Starting FastAPI server", extra={
+            'component': 'main',
+            'operation': 'server_start'
+        })
+        
+        uvicorn.run(routes.app, host="0.0.0.0", port=8000)
+        
+    except Exception as e:
+        # Log the error (system event)
+        logger.error("Server startup failed", extra={
+            'component': 'main',
+            'operation': 'startup_error',
+            'error_type': type(e).__name__,
+            'error_message': str(e)
+        })
+        
+        # Show error to user (rich output)
+        printer.error(f"Failed to start server: {e}")
+        raise
 
 
 def k8s():

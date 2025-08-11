@@ -18,7 +18,7 @@ spec:
       serviceAccountName: llm-powered-monitoring-sa
       containers:
       - name: llm-powered-monitoring
-        image: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:llm-powered-monitoring-0
+        image: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:llm-powered-monitoring-3 
         ports:
         - containerPort: 8000
         volumeMounts:

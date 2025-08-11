@@ -7,6 +7,9 @@ from typing import Dict
 from mistletoe import Document
 from mistletoe.markdown_renderer import MarkdownRenderer
 import threading
+from logs import get_logger, log_with_context
+
+logger = get_logger(__name__)
 
 # Global lock to serialize mistletoe usage (mistletoe is not thread-safe)
 _MD_LOCK = threading.Lock()
@@ -126,7 +129,12 @@ def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
     """Create the add_oss_workload tool function."""
     def add_oss_workload(workload_name: str) -> str:
         """Add a workload name to the detected OSS workloads list."""
+        printer.info(f"[tool-call] Adding {workload_name} to detected OSS workloads")
         detected_oss_workload_names.append(workload_name.lower())
+        logger.info(f"Adding {workload_name} to detected OSS workloads", extra={
+            'component': 'workflow',
+            'operation': 'add_oss_workload'
+        })
         return f"Added {workload_name} to the detected OSS workloads list"
     return add_oss_workload
 
@@ -145,6 +153,11 @@ def create_add_recommended_dashboard_tool(recommended_dashboards: dict) -> calla
         Returns:
             Confirmation message that the dashboard was added
         """
+        printer.info(f"[tool-call] Adding recommended dashboard: {dashboard_name} (ID: {dashboard_id})")
+        logger.info(f"Adding recommended dashboard: {dashboard_name} (ID: {dashboard_id})", extra={
+            'component': 'workflow',
+            'operation': 'add_recommended_dashboard'
+        })
         recommended_dashboards[dashboard_name] = dashboard_id
         return f"Added recommended dashboard: {dashboard_name} (ID: {dashboard_id})"
     return add_recommended_dashboard
@@ -160,6 +173,11 @@ def create_add_instruction(instruction_list: list) -> callable:
             content: The actual content of the instruction
             filename: Required for create_file type, the name of the file to create
         """
+        printer.info(f"[tool-call] Adding instruction: {type} - {content}")
+        logger.info(f"Adding instruction: {type} - {content}", extra={
+            'component': 'workflow',
+            'operation': 'add_instruction'
+        })
         type_lower = type.lower()
         
         if type_lower == 'kubectl':

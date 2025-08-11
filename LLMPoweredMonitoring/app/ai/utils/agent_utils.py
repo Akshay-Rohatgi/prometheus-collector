@@ -4,14 +4,14 @@ from typing import Any, Callable, Optional, Dict, Tuple
 from langchain_community.callbacks import get_openai_callback
 from langgraph.prebuilt import create_react_agent
 from printer import printer
-from ..models import llm_41
+from ..models import llm_4o
 from . import print_utils
 
 class AgentManager:
     """Manages the creation and execution of AI agents."""
 
     @staticmethod
-    def create_and_run_agent(prompt: str, model = llm_41, tools: list = [], agent_prompt: Optional[str] = None, error_handler: Optional[Callable] = None) -> Tuple[Any, float]:
+    def create_and_run_agent(prompt: str, model = llm_4o, tools: list = [], agent_prompt: Optional[str] = None, error_handler: Optional[Callable] = None) -> Tuple[Any, float]:
         """Create and run an AI agent with the specified configuration.
 
         Args:
