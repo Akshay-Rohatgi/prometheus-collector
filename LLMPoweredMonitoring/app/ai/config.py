@@ -6,7 +6,7 @@ from pathlib import Path
 K8S_CONFIG_PATH = "/mnt/c/Users/t-arohatgi/.kube/config"
 
 # Workflow configuration
-MAX_EVALUATION_ROUNDS = 2
+MAX_EVALUATION_ROUNDS = 3
 DEFAULT_EMOJI = "🔨"
 OSS_WORKLOAD_EMOJI = "🔍"
 

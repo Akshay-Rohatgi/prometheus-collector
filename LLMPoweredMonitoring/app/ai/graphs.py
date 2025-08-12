@@ -16,6 +16,76 @@ import time
 # Initialize logger
 logger = get_logger(__name__)
 
+def build_enhanced_evaluator_prompt(workload: k8s_client.Workload, exporter_name: str = None) -> str:
+    """Build an enhanced system prompt for the critic agent with workload context and values.yaml."""
+    
+    # Base evaluator prompt
+    base_prompt = """You are an expert on deploying and evaluating managed Prometheus monitoring plans for Azure Managed Prometheus. Your task is to evaluate the provided monitoring deployment plan for a Kubernetes workload and provide feedback on its completeness, correctness, and adherence to best practices.
+
+## Objective:
+Evaluate the provided monitoring deployment plan for a Kubernetes workload and provide feedback on its completeness, correctness, and adherence to best practices. The plan should be comprehensive and include all necessary steps to deploy monitoring for Azure Managed Prometheus.
+
+## Enhanced Validation Criteria:
+1. Service URI Format Validation:
+   - Verify that any service URIs provided are in the correct format (servicename.namespace.svc.cluster.local or servicename.namespace)
+   - Cross-reference against examples and instructions in the values.yaml documentation
+   - Ensure the service names and namespaces align with the actual workload being monitored
+
+2. Required Configuration Completeness:
+   - Verify all necessary values are included in the deployment commands
+   - Check for required credentials, usernames, passwords, database names, connection strings, etc.
+   - Ensure placeholder values exist for sensitive information (with proper warnings)
+   - Validate that all required configuration parameters for the specific exporter are addressed
+
+3. Correctness and Best Practices:
+   - Ensure that the plan correctly installs the necessary exporters and service monitors for the workload
+   - Verify that the plan includes all necessary parameters and configurations for the workload
+   - Ensure that optional sections are clearly marked as such
+   - Validate security best practices (no sensitive info in plain text)
+
+## Workload Context:"""
+    
+    # Add workload information
+    workload_info = f"""
+### Target Workload Information:
+{workload_utils.format_workload_info(workload)}
+"""
+    
+    # Add exporter context if provided
+    exporter_context = ""
+    if exporter_name:
+        exporter_context = f"""
+### Exporter Information:
+- Expected Exporter: prometheus-{exporter_name}-exporter
+- Base Service Name: {exporter_name} (use this for tool calls)
+
+### Available Tools for Validation:
+You have access to the following tools to get accurate helm chart information:
+- **get_values_yaml(exporter_name)**: Gets the complete values.yaml content with comments preserved for a prometheus exporter. Pass the base service name (e.g., "kafka", "redis", "nginx") and it will look up the corresponding prometheus-{{name}}-exporter chart.
+- **get_chart_readme(exporter_name)**: Gets the README.md content for a prometheus exporter chart, which contains usage examples, configuration notes, and best practices.
+- **get_values_yaml_formatted(exporter_name)**: Gets the flattened key-value pairs from values.yaml for a prometheus exporter. Returns a dictionary with dot notation keys (e.g., "serviceMonitor.enabled": true) containing all configurable parameters.
+
+**IMPORTANT**: When calling these tools, use only the base service name. For example:
+- For a Kafka workload: call `get_values_yaml("kafka")` NOT `get_values_yaml("prometheus-kafka-exporter")`
+- For a Redis workload: call `get_chart_readme("redis")` NOT `get_chart_readme("prometheus-redis-exporter")`
+- For a Postgres workload: call `get_values_yaml_formatted("postgres")` NOT `get_values_yaml_formatted("prometheus-postgres-exporter")`
+"""
+    
+    # Combine all parts
+    enhanced_prompt = base_prompt + workload_info + exporter_context + """
+
+## Instructions:
+- **ALWAYS** use the available tools to retrieve the official Helm chart documentation for validation
+- Use the base service name (e.g., "{exporter_name}") when calling tools, not the full chart name
+- Cross-reference the monitoring plan against the retrieved values.yaml documentation
+- Pay special attention to service URI formats and required configuration parameters
+- Validate that all necessary parameters are included with proper placeholder values for sensitive information
+- Provide specific, actionable feedback for any issues found
+- Clearly state whether the plan is APPROVED or NEEDS IMPROVEMENT
+- If improvements are needed, provide detailed guidance on what to fix""".format(exporter_name=exporter_name or "service")
+    
+    return enhanced_prompt
+
 class MonitoringPlan(BaseModel):
     markdown_plan: str = None
     structured_plan: list[MonitoringInstruction] = None
@@ -325,7 +395,14 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Get the workload name for context
     workload_name = workflow.verified_oss_workload.name if workflow.verified_oss_workload else "Unknown"
     
-    # Prepare the evaluation prompt
+    # Derive exporter name from workload name (e.g., "kafka" -> "kafka", "postgres" -> "postgres")
+    # The workload name typically maps directly to the exporter name
+    exporter_name = workload_name.lower()
+    
+    # Build enhanced system prompt with workload context and exporter information
+    enhanced_system_prompt = build_enhanced_evaluator_prompt(workflow.verified_oss_workload, exporter_name)
+    
+    # Prepare the evaluation prompt (focused only on the plan)
     plan_text = f"""
     Monitoring Plan for {workload_name}:
     
@@ -346,14 +423,15 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     
     This is evaluation round {feedback.round_count} of {MAX_EVALUATION_ROUNDS}. 
     Provide comprehensive feedback and determine if the plan should be approved or needs improvement.
-    Use the provide_feedback function to give your evaluation.
+    Use the available tools to cross-reference the plan against the official Helm chart documentation.
     """
 
-    # Run the critic agent
+    # Run the critic agent with enhanced context and tools
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=evaluation_prompt,
         model=models.llm_4o,
-        agent_prompt=prompts.MONITORING_PLAN_EVALUATOR_PROMPT
+        tools=[tools.get_values_yaml, tools.get_chart_readme, tools.get_values_yaml_formatted],
+        agent_prompt=enhanced_system_prompt
     )
     
     if response:

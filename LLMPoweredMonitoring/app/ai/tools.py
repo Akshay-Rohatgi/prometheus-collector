@@ -80,6 +80,25 @@ def get_values_yaml_formatted(exporter_name: str) -> dict:
     except Exception as e:
         return {"error": f"Error accessing GitHub repository: {str(e)}"}
 
+def get_values_yaml(exporter_name: str) -> str:
+    """Get the complete values.yaml content with comments preserved for a prometheus exporter."""
+    printer.info(f"[tool-call] get_values_yaml({exporter_name})")
+    try:
+        # Get GitHub client and repo
+        github_client = gh_utils.get_github_client()
+        repo = gh_utils.get_repo(github_client, "prometheus-community/helm-charts")
+        
+        # Get values.yaml content from the exporter directory
+        chart_dir = f"charts/prometheus-{exporter_name}-exporter"
+        try:
+            directory_content = gh_utils.get_directory_content(repo, chart_dir)
+            values_content = gh_utils.get_file_content_from_directory(repo, directory_content, "values.yaml")
+            return f"Complete values.yaml for prometheus-{exporter_name}-exporter:\n\n{values_content}"
+        except Exception as e:
+            return f"Could not find values.yaml for prometheus-{exporter_name}-exporter: {str(e)}"
+    except Exception as e:
+        return f"Error accessing GitHub repository: {str(e)}"
+
 def get_chart_readme(exporter_name: str) -> str:
     """Get the README.md content for a prometheus exporter chart."""
     try:
