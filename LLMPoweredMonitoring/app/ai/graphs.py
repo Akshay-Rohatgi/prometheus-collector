@@ -10,7 +10,7 @@ from langgraph.types import interrupt
 from langgraph.graph import StateGraph
 from langgraph.constants import START, END
 from langgraph.checkpoint.memory import MemorySaver
-from logs import get_logger, log_with_context
+from logs import get_logger
 import time
 
 # Initialize logger
@@ -99,7 +99,11 @@ class Workflow(BaseModel):
     thread_id: str = None
 
     detected_workloads: dict[str, k8s_client.Workload] = None
+
     detected_oss_workloads: dict[str, k8s_client.Workload] = None
+    oss_detection_reasoning: str = None
+    oss_detection_tool_calls: dict = None
+
     selected_oss_workload: k8s_client.Workload = None
 
     verified_oss_workload: k8s_client.Workload = None
@@ -127,11 +131,28 @@ def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     try:
         client = k8s_client.K8sClient(K8S_CONFIG_PATH)
         detected_workloads = k8s_client.detect_workloads(client)
-        
         detected_workloads_dict = {
             workload.name.lower(): workload for workload in detected_workloads
         }
         
+        # Dump as JSON for debugging
+        # workloads_json = {}
+        # for name, workload in detected_workloads_dict.items():
+        #     workloads_json[name] = {
+        #         "name": workload.name,
+        #         "namespace": workload.namespace,
+        #         "metadata_name": workload.metadata_name,
+        #         "metadata_labels": workload.metadata_labels,
+        #         "service_type": workload.service_type,
+        #         "service_ports": workload.service_ports,
+        #         "service_annotations": workload.service_annotations,
+        #         "is_oss": workload.is_oss,
+        #         "monitoring_config": workload.monitoring_config
+        #     }
+        # import json
+        # with open("workloads.json", "w") as f:
+        #     json.dump(workloads_json, f, indent=2)
+
         duration_ms = round((time.time() - start_time) * 1000, 2)
         logger.info("Workload detection completed", extra={
             'component': 'ai_graphs',
@@ -184,8 +205,13 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
         
         if response:
             response_content = agent_utils.AgentManager.get_agent_response_content(response)
+            tool_calls = agent_utils.AgentManager.get_agent_tool_calls(response)
             if response_content:
                 printer.out(response_content)
+            if tool_calls:
+                printer.out(tool_calls)
+            workflow.oss_detection_reasoning = response_content
+            workflow.oss_detection_tool_calls = tool_calls
 
             detected_oss_workloads = workload_utils.filter_workloads(
                 workflow.detected_workloads, 
@@ -280,7 +306,6 @@ def confirmation_before_planning(workflow: Workflow) -> dict[str, bool]:
     printer.info(f"{status} to generate monitoring deployment plan.")
 
     return {"confirmed_to_plan": begin_approval}
-
 
 def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, MonitoringPlan]:
     """Generate a monitoring deployment plan using an AI agent."""

@@ -3,13 +3,13 @@
 from typing import Any, Callable, Optional, Dict, Tuple
 from langchain_community.callbacks import get_openai_callback
 from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import ToolMessage
 from printer import printer
 from ..models import llm_4o
 from . import print_utils
 
 class AgentManager:
     """Manages the creation and execution of AI agents."""
-
     @staticmethod
     def create_and_run_agent(prompt: str, model = llm_4o, tools: list = [], agent_prompt: Optional[str] = None, error_handler: Optional[Callable] = None) -> Tuple[Any, float]:
         """Create and run an AI agent with the specified configuration.
@@ -63,3 +63,28 @@ class AgentManager:
             return response["messages"][index].content
         except (KeyError, IndexError):
             return None
+
+    @staticmethod
+    def get_agent_tool_calls(response: Dict[str, Any]) -> list[dict]:
+        """Extract tool calls from an agent response.
+
+        Args:
+            response: The response dictionary from the agent
+
+        Returns:
+            A list of tool call names, or None if not found
+        """
+        tool_calls = []
+        try:
+            for response in response["messages"]:
+                if getattr(response, "tool_calls", None):
+                    for raw_call in response.tool_calls:
+                        tool_calls.append({
+                            "name": raw_call["name"],
+                            "args": raw_call["args"],
+                            "id": raw_call["id"],
+                        })
+        except (KeyError, TypeError):
+            return None
+        
+        return tool_calls

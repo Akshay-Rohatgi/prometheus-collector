@@ -1,0 +1,471 @@
+{
+  "hello-world": {
+    "name": "hello-world",
+    "namespace": "default",
+    "metadata_name": "hello-world",
+    "metadata_labels": {
+      "app.kubernetes.io/component": "rabbitmq",
+      "app.kubernetes.io/name": "hello-world",
+      "app.kubernetes.io/part-of": "rabbitmq"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "amqp",
+        "port": 5672,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "management",
+        "port": 15672,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "prometheus",
+        "port": 15692,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "hello-world-nodes": {
+    "name": "hello-world-nodes",
+    "namespace": "default",
+    "metadata_name": "hello-world-nodes",
+    "metadata_labels": {
+      "app.kubernetes.io/component": "rabbitmq",
+      "app.kubernetes.io/name": "hello-world",
+      "app.kubernetes.io/part-of": "rabbitmq"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "epmd",
+        "port": 4369,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "cluster-rpc",
+        "port": 25672,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "investibots-service": {
+    "name": "investibots-service",
+    "namespace": "default",
+    "metadata_name": "investibots-service",
+    "metadata_labels": null,
+    "service_type": "LoadBalancer",
+    "service_ports": [
+      {
+        "name": null,
+        "port": 80,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"name\":\"investibots-service\",\"namespace\":\"default\"},\"spec\":{\"ports\":[{\"port\":80,\"protocol\":\"TCP\",\"targetPort\":8000}],\"selector\":{\"app\":\"investibots\"},\"type\":\"LoadBalancer\"}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "kubernetes": {
+    "name": "kubernetes",
+    "namespace": "default",
+    "metadata_name": "kubernetes",
+    "metadata_labels": {
+      "component": "apiserver",
+      "provider": "kubernetes"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "https",
+        "port": 443,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "mysql": {
+    "name": "mysql",
+    "namespace": "default",
+    "metadata_name": "mysql",
+    "metadata_labels": null,
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": null,
+        "port": 3306,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"name\":\"mysql\",\"namespace\":\"default\"},\"spec\":{\"ports\":[{\"port\":3306}],\"selector\":{\"app\":\"mysql\"}}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "nginx-project": {
+    "name": "nginx-project",
+    "namespace": "default",
+    "metadata_name": "nginx-project",
+    "metadata_labels": null,
+    "service_type": "LoadBalancer",
+    "service_ports": [
+      {
+        "name": null,
+        "port": 80,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"name\":\"nginx-project\",\"namespace\":\"default\"},\"spec\":{\"ports\":[{\"port\":80}],\"selector\":{\"app\":\"nginx-project\"},\"type\":\"LoadBalancer\"}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "nginx-service": {
+    "name": "nginx-service",
+    "namespace": "default",
+    "metadata_name": "nginx-service",
+    "metadata_labels": null,
+    "service_type": "LoadBalancer",
+    "service_ports": [
+      {
+        "name": null,
+        "port": 80,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"name\":\"nginx-service\",\"namespace\":\"default\"},\"spec\":{\"ports\":[{\"port\":80,\"protocol\":\"TCP\",\"targetPort\":80}],\"selector\":{\"app\":\"nginx\"},\"type\":\"LoadBalancer\"}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "postgres": {
+    "name": "postgres",
+    "namespace": "default",
+    "metadata_name": "postgres",
+    "metadata_labels": {
+      "app": "postgres"
+    },
+    "service_type": "NodePort",
+    "service_ports": [
+      {
+        "name": null,
+        "port": 5432,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"postgres\"},\"name\":\"postgres\",\"namespace\":\"default\"},\"spec\":{\"ports\":[{\"port\":5432}],\"selector\":{\"app\":\"postgres\"},\"type\":\"NodePort\"}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "prometheus-reference-service": {
+    "name": "prometheus-reference-service",
+    "namespace": "default",
+    "metadata_name": "prometheus-reference-service",
+    "metadata_labels": {
+      "app": "prometheus-reference-app"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "weather-app",
+        "port": 2112,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "untyped-metrics",
+        "port": 2113,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "python-client",
+        "port": 2114,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"prometheus-reference-app\"},\"name\":\"prometheus-reference-service\",\"namespace\":\"default\"},\"spec\":{\"ports\":[{\"name\":\"weather-app\",\"port\":2112,\"protocol\":\"TCP\",\"targetPort\":2112},{\"name\":\"untyped-metrics\",\"port\":2113,\"protocol\":\"TCP\",\"targetPort\":2113},{\"name\":\"python-client\",\"port\":2114,\"protocol\":\"TCP\",\"targetPort\":2114}],\"selector\":{\"app\":\"prometheus-reference-app\"}}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "quickstart-es-default": {
+    "name": "quickstart-es-default",
+    "namespace": "default",
+    "metadata_name": "quickstart-es-default",
+    "metadata_labels": {
+      "common.k8s.elastic.co/type": "elasticsearch",
+      "elasticsearch.k8s.elastic.co/cluster-name": "quickstart",
+      "elasticsearch.k8s.elastic.co/statefulset-name": "quickstart-es-default"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "https",
+        "port": 9200,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "quickstart-es-http": {
+    "name": "quickstart-es-http",
+    "namespace": "default",
+    "metadata_name": "quickstart-es-http",
+    "metadata_labels": {
+      "common.k8s.elastic.co/type": "elasticsearch",
+      "elasticsearch.k8s.elastic.co/cluster-name": "quickstart"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "https",
+        "port": 9200,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "quickstart-es-internal-http": {
+    "name": "quickstart-es-internal-http",
+    "namespace": "default",
+    "metadata_name": "quickstart-es-internal-http",
+    "metadata_labels": {
+      "common.k8s.elastic.co/type": "elasticsearch",
+      "elasticsearch.k8s.elastic.co/cluster-name": "quickstart"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "https",
+        "port": 9200,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "quickstart-es-transport": {
+    "name": "quickstart-es-transport",
+    "namespace": "default",
+    "metadata_name": "quickstart-es-transport",
+    "metadata_labels": {
+      "common.k8s.elastic.co/type": "elasticsearch",
+      "elasticsearch.k8s.elastic.co/cluster-name": "quickstart"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "tls-transport",
+        "port": 9300,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "rabbitmq-rabbitmq-messaging-topology-operator-webhook": {
+    "name": "rabbitmq-rabbitmq-messaging-topology-operator-webhook",
+    "namespace": "default",
+    "metadata_name": "rabbitmq-rabbitmq-messaging-topology-operator-webhook",
+    "metadata_labels": {
+      "app.kubernetes.io/component": "messaging-topology-operator",
+      "app.kubernetes.io/instance": "rabbitmq",
+      "app.kubernetes.io/managed-by": "Helm",
+      "app.kubernetes.io/name": "rabbitmq-cluster-operator",
+      "app.kubernetes.io/part-of": "rabbitmq",
+      "app.kubernetes.io/version": "1.17.2",
+      "helm.sh/chart": "rabbitmq-cluster-operator-4.4.25"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "https",
+        "port": 443,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "meta.helm.sh/release-name": "rabbitmq",
+      "meta.helm.sh/release-namespace": "default"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "elastic-webhook-server": {
+    "name": "elastic-webhook-server",
+    "namespace": "elastic-system",
+    "metadata_name": "elastic-webhook-server",
+    "metadata_labels": {
+      "app.kubernetes.io/version": "2.13.0",
+      "control-plane": "elastic-operator"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "https",
+        "port": 443,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"labels\":{\"app.kubernetes.io/version\":\"2.13.0\",\"control-plane\":\"elastic-operator\"},\"name\":\"elastic-webhook-server\",\"namespace\":\"elastic-system\"},\"spec\":{\"ports\":[{\"name\":\"https\",\"port\":443,\"targetPort\":9443}],\"selector\":{\"control-plane\":\"elastic-operator\"}}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "my-cluster-kafka-bootstrap": {
+    "name": "my-cluster-kafka-bootstrap",
+    "namespace": "kafka",
+    "metadata_name": "my-cluster-kafka-bootstrap",
+    "metadata_labels": {
+      "app.kubernetes.io/instance": "my-cluster",
+      "app.kubernetes.io/managed-by": "strimzi-cluster-operator",
+      "app.kubernetes.io/name": "kafka",
+      "app.kubernetes.io/part-of": "strimzi-my-cluster",
+      "strimzi.io/cluster": "my-cluster",
+      "strimzi.io/component-type": "kafka",
+      "strimzi.io/discovery": "true",
+      "strimzi.io/kind": "Kafka",
+      "strimzi.io/name": "my-cluster-kafka"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "tcp-replication",
+        "port": 9091,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "tcp-clients",
+        "port": 9092,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "tcp-clientstls",
+        "port": 9093,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "strimzi.io/discovery": "[ {\n  \"port\" : 9092,\n  \"tls\" : false,\n  \"protocol\" : \"kafka\",\n  \"auth\" : \"none\"\n}, {\n  \"port\" : 9093,\n  \"tls\" : true,\n  \"protocol\" : \"kafka\",\n  \"auth\" : \"none\"\n} ]"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "my-cluster-kafka-brokers": {
+    "name": "my-cluster-kafka-brokers",
+    "namespace": "kafka",
+    "metadata_name": "my-cluster-kafka-brokers",
+    "metadata_labels": {
+      "app.kubernetes.io/instance": "my-cluster",
+      "app.kubernetes.io/managed-by": "strimzi-cluster-operator",
+      "app.kubernetes.io/name": "kafka",
+      "app.kubernetes.io/part-of": "strimzi-my-cluster",
+      "strimzi.io/cluster": "my-cluster",
+      "strimzi.io/component-type": "kafka",
+      "strimzi.io/kind": "Kafka",
+      "strimzi.io/name": "my-cluster-kafka"
+    },
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": "tcp-ctrlplane",
+        "port": 9090,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "tcp-replication",
+        "port": 9091,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "tcp-kafkaagent",
+        "port": 8443,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "tcp-clients",
+        "port": 9092,
+        "target_port": null,
+        "protocol": "TCP"
+      },
+      {
+        "name": "tcp-clientstls",
+        "port": 9093,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": null,
+    "is_oss": null,
+    "monitoring_config": null
+  },
+  "llm-powered-monitoring-service": {
+    "name": "llm-powered-monitoring-service",
+    "namespace": "llm-powered-monitoring",
+    "metadata_name": "llm-powered-monitoring-service",
+    "metadata_labels": null,
+    "service_type": "ClusterIP",
+    "service_ports": [
+      {
+        "name": null,
+        "port": 8000,
+        "target_port": null,
+        "protocol": "TCP"
+      }
+    ],
+    "service_annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"name\":\"llm-powered-monitoring-service\",\"namespace\":\"llm-powered-monitoring\"},\"spec\":{\"ports\":[{\"port\":8000,\"protocol\":\"TCP\",\"targetPort\":8000}],\"selector\":{\"app\":\"llm-powered-monitoring\"},\"type\":\"ClusterIP\"}}\n"
+    },
+    "is_oss": null,
+    "monitoring_config": null
+  }
+}

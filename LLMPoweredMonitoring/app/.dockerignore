@@ -215,3 +215,6 @@ __marimo__/
 README.md
 Dockerfile
 .dockerignore
+
+# Deepeval
+.deepeval/*
