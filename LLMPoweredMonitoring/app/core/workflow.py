@@ -8,6 +8,7 @@ phases = [
     "monitoring-plan-evaluation", 
     "deployment-confirmation",
     "dashboard-recommendation",
+    "alerting-rules-recommendation",
     "completed", 
     "cancelled", 
     "failed"

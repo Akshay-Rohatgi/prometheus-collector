@@ -182,6 +182,53 @@ if approve_plan == "yes" or len(approve_plan) == 0:
                     client_print("💡 You can import these dashboards into your Grafana instance using their IDs.")
             else:
                 client_print(f"❌ Error getting dashboard recommendations: {dashboard_response.json()}")
+
+        # Check if we're now in alerting-rules-recommendation phase
+        status = check_workflow_status(thread_id)
+        if status and status.get('phase') == 'alerting-rules-recommendation':
+            client_print("\n🚨 Alerting Rules Recommendation Phase")
+            get_alerting_rules = input("Would you like to get Prometheus alerting rules recommendations? (yes/no): ").strip().lower()
+            
+            alerting_rules_response = requests.post(
+                f"{BASE_URL}/get_alerting_rules_recommendations/{thread_id}", 
+                json={"get_recommendations": get_alerting_rules == "yes" or len(get_alerting_rules) == 0}
+            )
+            
+            if alerting_rules_response.status_code == 200:
+                alerting_rules_result = alerting_rules_response.json()
+                client_print(f"✅ {alerting_rules_result['message']}")
+                
+                if alerting_rules_result.get("recommended_alerting_rules"):
+                    alerting_rules_data = alerting_rules_result["recommended_alerting_rules"]
+                    
+                    # Show the markdown recommendation first
+                    if alerting_rules_data.get("recommendation"):
+                        client_print("\n� Alerting Strategy Explanation:")
+                        console.print("─" * 80)
+                        console.print(Markdown(alerting_rules_data["recommendation"]))
+                        console.print("─" * 80)
+                    
+                    # Show the Azure-compatible version (preferred)
+                    if alerting_rules_data.get("az_compatible_recommended_alerting_rules"):
+                        client_print("\n🚨 Azure Managed Prometheus Alerting Rules:")
+                        console.print("─" * 80)
+                        console.print(f"```yaml\n{alerting_rules_data['az_compatible_recommended_alerting_rules']}\n```")
+                        console.print("─" * 80)
+                        client_print("💡 These rules are ready to use with Azure Managed Prometheus.")
+                    
+                    # Fallback to generic version with instructions
+                    elif alerting_rules_data.get("generic_recommended_alerting_rules"):
+                        client_print("\n🚨 Generic Prometheus Alerting Rules:")
+                        console.print("─" * 80)
+                        console.print(f"```yaml\n{alerting_rules_data['generic_recommended_alerting_rules']}\n```")
+                        console.print("─" * 80)
+                        client_print("⚠️  Azure conversion failed. Use the converter tool:")
+                        client_print("🔗 https://github.com/Azure/prometheus-collector/tree/main/tools/az-prom-rules-converter")
+                    else:
+                        client_print("⚠️ No YAML content found in alerting rules recommendations.")
+            else:
+                client_print(f"❌ Error getting alerting rules recommendations: {alerting_rules_response.json()}")
+                    
                     
     else:
         client_print("❌ No structured plan available for deployment.")

@@ -496,23 +496,35 @@ async def get_dashboard_recommendations(thread_id: str, request: getDashboardRec
             status.config
         )
 
-        # Workflow completed successfully, update status
-        status.active = False
-        status.phase = "completed"
-        # Clean up the graph instance
-        await cleanup_workflow_graph(thread_id)
+        # Check if the workflow has hit the next interrupt (alerting rules)
+        # If the workflow is still active after this invoke, it means it hit another interrupt
+        current_state = await asyncio.to_thread(
+            workflow_graph.get_state,
+            status.config
+        )
+        
+        if current_state.next:  # There are more nodes to execute (hit an interrupt)
+            # The workflow continued to alerting rules and is waiting for input
+            status.phase = "alerting-rules-recommendation"  
+            status.active = True  # Keep workflow active for the next interrupt
+        else:
+            # Workflow completed successfully, update status
+            status.active = False
+            status.phase = "completed"
+            # Clean up the graph instance
+            await cleanup_workflow_graph(thread_id)
         
         if request.get_recommendations:
             recommended_dashboards = result.get("recommended_dashboards", {})
             return {
                 "message": "Dashboard recommendations generated successfully",
                 "recommended_dashboards": recommended_dashboards,
-                "status": "completed"
+                "status": status.phase  # Return actual current phase
             }
         else:
             return {
-                "message": "Dashboard recommendations skipped, workflow completed",
-                "status": "completed"
+                "message": "Dashboard recommendations skipped" + (", workflow continues to alerting rules" if status.active else ", workflow completed"),
+                "status": status.phase  # Return actual current phase
             }
 
     except Exception as e:
@@ -520,4 +532,78 @@ async def get_dashboard_recommendations(thread_id: str, request: getDashboardRec
         status.phase = "failed"
         await cleanup_workflow_graph(thread_id)
         error_message = f"Error processing dashboard recommendations: {str(e)}"
+        raise HTTPException(status_code=500, detail=error_message)
+
+# =========================================================
+
+class getAlertingRulesRecommendationsRequest(BaseModel):
+    get_recommendations: bool
+
+@app.post("/get_alerting_rules_recommendations/{thread_id}")
+async def get_alerting_rules_recommendations(thread_id: str, request: getAlertingRulesRecommendationsRequest):
+    """Get Prometheus alerting rules recommendations for the deployed monitoring plan"""
+    # Get the workflow status for this specific thread
+    async with _workflows_lock:
+        status = _workflows.get(thread_id)
+    
+    if not status or not status.active:
+        raise HTTPException(status_code=400, detail="No active workflow found for this thread_id")
+    
+    if status.phase != "alerting-rules-recommendation":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Workflow is not in alerting-rules-recommendation phase. Current phase: {status.phase}"
+        )
+
+    try:
+        if request.get_recommendations:
+            printer.info(f"Generating alerting rules recommendations for {thread_id}")
+        else:
+            printer.info(f"Skipping alerting rules recommendations for {thread_id}")
+        
+        # Get workflow-specific graph instance
+        workflow_graph = await get_workflow_graph(thread_id)
+        
+        # Resume the workflow with user's choice
+        result = await asyncio.to_thread(
+            workflow_graph.invoke,
+            Command(resume=request.get_recommendations),
+            status.config
+        )
+
+        # Workflow completed successfully, update status
+        status.active = False
+        status.phase = "completed"
+        # Clean up the graph instance
+        await cleanup_workflow_graph(thread_id)
+        
+        if request.get_recommendations:
+            recommended_alerting_rules = result.get("recommended_alerting_rules")
+            
+            # Convert AlertingRules object to dict for JSON serialization
+            if recommended_alerting_rules:
+                alerting_rules_dict = {
+                    "recommendation": recommended_alerting_rules.recommendation,
+                    "generic_recommended_alerting_rules": recommended_alerting_rules.generic_recommended_alerting_rules,
+                    "az_compatible_recommended_alerting_rules": recommended_alerting_rules.az_compatible_recommended_alerting_rules
+                }
+            else:
+                alerting_rules_dict = None
+                
+            return {
+                "message": "Alerting rules recommendations generated successfully",
+                "recommended_alerting_rules": alerting_rules_dict,
+                "status": "completed"
+            }
+        else:
+            return {
+                "message": "Alerting rules recommendations skipped, workflow completed",
+                "status": "completed"
+            }
+
+    except Exception as e:
+        status.active = False
+        status.phase = "failed"
+        await cleanup_workflow_graph(thread_id)
+        error_message = f"Error processing alerting rules recommendations: {str(e)}"
         raise HTTPException(status_code=500, detail=error_message)

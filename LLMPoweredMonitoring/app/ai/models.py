@@ -15,7 +15,7 @@ llm_4o = AzureChatOpenAI(
     api_version="2024-12-01-preview",
     temperature=0.3,
     azure_endpoint="https://rashmi-openai.openai.azure.com/",
-    api_key=os.getenv("RASHMI_AZURE_OPENAI_API_KEY")
+    api_key=os.getenv("RASHMI_AZURE_OPENAI_API_KEY"),
 )
 
 llm_5_mini = AzureChatOpenAI(

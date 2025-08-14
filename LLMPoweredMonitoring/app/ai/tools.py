@@ -315,3 +315,75 @@ def generate_monitoring_plan_prompt(workload: k8s.client.Workload) -> str:
 
     {workload_info}
     """
+
+
+def create_add_alerting_rules_tool(alerting_rules_storage: dict) -> callable:
+    """Create a function to add alerting rules."""
+    def add_alerting_rules(yaml_content: str) -> str:
+        """Add Prometheus alerting rules in YAML format.
+        
+        This tool should be used to provide the final Prometheus alerting rules configuration
+        that will be deployed to monitor the workload. The rules should be in proper Prometheus
+        YAML format and include appropriate alert conditions, thresholds, and severity levels.
+        
+        Args:
+            yaml_content: Complete YAML content for Prometheus alerting rules
+            
+        Returns:
+            Confirmation message that the rules were added
+        """
+        printer.info(f"[tool-call] Adding alerting rules YAML content (length: {len(yaml_content)} chars)")
+        logger.info(f"Adding alerting rules YAML content", extra={
+            'component': 'workflow',
+            'operation': 'add_alerting_rules',
+            'yaml_length': len(yaml_content)
+        })
+        alerting_rules_storage["yaml_content"] = yaml_content
+        return f"Successfully added Prometheus alerting rules configuration ({len(yaml_content)} characters)"
+    
+    return add_alerting_rules
+
+def create_plan_approval_tool(approval_result: dict) -> callable:
+    """Create a tool for the critic to explicitly approve or reject monitoring plans."""
+    def approve_plan(approved: bool, feedback: str, critical_issues: list = None) -> str:
+        """
+        Tool for critic to explicitly approve or reject a monitoring plan.
+        
+        This tool MUST be called at the end of your evaluation to make a final decision.
+        Use this after you have thoroughly evaluated the monitoring plan against all criteria.
+        
+        Args:
+            approved (bool): True if the plan is approved and ready for deployment, 
+                           False if it needs improvement before deployment
+            feedback (str): Detailed feedback explaining your decision, including specific 
+                          issues found or confirmation that requirements are met
+            critical_issues (list, optional): List of critical issues that must be fixed 
+                                            if the plan is not approved. Each item should 
+                                            be a clear, actionable issue description.
+        
+        Returns:
+            Confirmation message about the approval decision
+            
+        Examples:
+            - approve_plan(True, "Plan meets all Azure Managed Prometheus requirements...")
+            - approve_plan(False, "Plan has critical issues that need addressing...", 
+                         ["Missing apiVersion override for Azure", "Incorrect service URI format"])
+        """
+        approval_result["approved"] = approved
+        approval_result["feedback"] = feedback
+        approval_result["issues"] = critical_issues or []
+        
+        status = "APPROVED" if approved else "NEEDS IMPROVEMENT"
+        issues_text = f" with {len(approval_result['issues'])} critical issues" if approval_result['issues'] else ""
+        
+        printer.info(f"[tool-call] Plan evaluation complete: {status}{issues_text}")
+        logger.info(f"Plan approval decision made: {status}", extra={
+            'component': 'workflow',
+            'operation': 'approve_plan',
+            'approved': approved,
+            'critical_issues_count': len(approval_result['issues'])
+        })
+        
+        return f"Plan evaluation complete: {status}"
+    
+    return approve_plan

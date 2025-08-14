@@ -54,12 +54,14 @@ helm install azmon-kafka-exporter --namespace=azmon-kafka-exporter --create-name
     - **USE** the search_values_keys() tool to quickly find specific types of configuration parameters. For example:
       - `search_values_keys("postgres", ".*password.*|.*username.*")` to find authentication parameters
       - `search_values_keys("kafka", ".*server.*|.*uri.*|.*endpoint.*")` to find connection parameters
+      - `search_values_keys("mysql", "db.*|database.*|datasource.*")` to find database/datasource parameters
       - `search_values_keys("redis", "serviceMonitor.*|podMonitor.*")` to find monitoring configuration options
     - When looking up the values.yaml file, you should look for the following parameters:
         - For example the "server" parameter. The parameter name will take different forms based on the specific exporter you are working with. For example Kafka it is kafkaServer as seen in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-nginx-exporter/values.yaml or for RabbitMQ it is rabbitmq.uri as seen in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-rabbitmq-exporter/values.yaml. You have to dynamically determine the parameter name based on the specific exporter you are working with.
         - For the serviceMonitor and podMonitor enablement, you also have to dynamically determine the parameters based on the specific exporter you are working with. For example, for Kafka it is prometheus.serviceMonitor.enabled, while for postgres it is serviceMonitor.enabled. You can find the specific parameters in the values.yaml file for the specific exporter you are working with. For example in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-postgres-exporter/values.yaml you can see that serviceMonitor is a top-level parameter, while in https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-kafka-exporter/values.yaml it is under prometheus.serviceMonitor. You have to dynamically determine the parameter name based on the specific exporter you are working with.
     - Some important reminders:
         - The general structure for a service URL is {<service-name>.<namespace>.svc.cluster.local:<service-port>} and you can use this to construct the service URL for the specific service you are working with.
+        - When configuring database services, remember to parameterize the database host, you can use `search_values_keys("redis", "db.*|database.*|datasource.*")` to find database/datasource parameters
         - Some deployments will require a username or password, in which case you can't do anything except include that as a "WARNING" in the markdown plan. You should not include any sensitive information in the markdown plan, but you should include a warning that the username and password are required for the exporter to work properly. For example, if the workload is "postgres", you would include a warning like this:
           **WARNING**: The postgres exporter requires a username and password to be set in the values.yaml file. You should set these values in the values.yaml file before deploying the exporter. The username and password should be set in the `postgresql.username` and `postgresql.password` parameters in the values.yaml file. You can find more information about the specific chart and how to set its values in its values.yaml file.
         - Avoid generating a plan that requires the user to pass a file into the --values parameter of the helm install command. Instead, you should always use the --set parameter to set the values directly in the command. This is important to ensure that the plan is easy to use and does not require the user to create a file.
@@ -84,3 +86,9 @@ helm install azmon-kafka-exporter --namespace=azmon-kafka-exporter --create-name
 
 ## References
 * Provide links to any relevant documentation or resources that can help with the implementation of the monitoring plan.
+
+- **DISCOVER required parameters intelligently**:
+  - Consider what the service type needs (database → connection details, web service → endpoints, etc.)
+  - Use get_values_yaml_formatted() first to understand the available configuration structure
+  - Use search_values_keys() with logical, service-appropriate search terms
+  - Adapt your search strategy based on what you find, don't rely on pre-defined patterns

@@ -25,6 +25,20 @@ def build_enhanced_evaluator_prompt(workload: k8s_client.Workload, exporter_name
 ## Objective:
 Evaluate the provided monitoring deployment plan for a Kubernetes workload and provide feedback on its completeness, correctness, and adherence to best practices. The plan should be comprehensive and include all necessary steps to deploy monitoring for Azure Managed Prometheus.
 
+**Important** Everytime you make a critique do two things:
+- provide EVIDENCE of why the critique is valid. If you cannot provide evidence then do not make the critique. Reference official Helm documentation or prometheus-community chart schemas. For example, if you are providing critique on a URI, reference official documentation or tool call output to make your claim. 
+- Check to make sure that the critique does not violate any non-negotiables. The non-negotiables are:
+
+### Non-Negotiables
+- **CRITICAL**: The apiVersion for ServiceMonitors and PodMonitors must ALWAYS be "azmonitoring.coreos.com/v1" (NOT "monitoring.coreos.com/v1"). This is Azure-specific and required for Azure Managed Prometheus integration.
+- Any NOT required configurations such as RBAC, SASL, TLS should be clearly marked as optional and not included in the main deployment plan. If you suggest these improvements remind the generator agent that it should be placed in an optional or extra steps section.
+
+### Important Note About apiVersion:
+- The values.yaml files you retrieve will show "monitoring.coreos.com/v1" as the default apiVersion - this is the standard Prometheus Operator format
+- However, for Azure Managed Prometheus, you MUST override this to use "azmonitoring.coreos.com/v1" 
+- This override is typically done via Helm parameters like: `--set serviceMonitor.apiVersion=azmonitoring.coreos.com/v1`
+- Do NOT be confused by seeing "monitoring.coreos.com/v1" in the documentation - always enforce the Azure-specific version
+
 ## Enhanced Validation Criteria:
 1. Service URI Format Validation:
    - Verify that any service URIs provided are in the correct format (servicename.namespace.svc.cluster.local or servicename.namespace)
@@ -33,9 +47,12 @@ Evaluate the provided monitoring deployment plan for a Kubernetes workload and p
 
 2. Required Configuration Completeness:
    - Verify all necessary values are included in the deployment commands
-   - Check for required credentials, usernames, passwords, database names, connection strings, etc.
+   - **CRITICAL**: Ensure the apiVersion is explicitly set to "azmonitoring.coreos.com/v1" via Helm parameters
+   - Check for **required** credentials, usernames, passwords, database names, connection strings, etc.
+        - A common mistake the generation step makes is to forget database parameters for workloads such as MySQL
    - Ensure placeholder values exist for sensitive information (with proper warnings)
    - Validate that all required configuration parameters for the specific exporter are addressed
+   - Any NOT required configurations such as RBAC, SASL, TLS should be clearly marked as optional and not included in the main deployment plan. If you suggest these improvements remind the generator agent that it should be placed in an optional or extra steps section.
 
 3. Correctness and Best Practices:
    - Ensure that the plan correctly installs the necessary exporters and service monitors for the workload
@@ -69,6 +86,8 @@ You have access to the following tools to get accurate helm chart information:
 - For a Kafka workload: call `get_values_yaml("kafka")` NOT `get_values_yaml("prometheus-kafka-exporter")`
 - For a Redis workload: call `get_chart_readme("redis")` NOT `get_chart_readme("prometheus-redis-exporter")`
 - For a Postgres workload: call `get_values_yaml_formatted("postgres")` NOT `get_values_yaml_formatted("prometheus-postgres-exporter")`
+
+**CRITICAL REMINDER**: The values.yaml files will show "monitoring.coreos.com/v1" as the default, but you must ensure the monitoring plan overrides this to "azmonitoring.coreos.com/v1" for Azure compatibility.
 """
     
     # Combine all parts
@@ -78,11 +97,23 @@ You have access to the following tools to get accurate helm chart information:
 - **ALWAYS** use the available tools to retrieve the official Helm chart documentation for validation
 - Use the base service name (e.g., "{exporter_name}") when calling tools, not the full chart name
 - Cross-reference the monitoring plan against the retrieved values.yaml documentation
+- **CRITICAL**: Verify that the monitoring plan explicitly sets apiVersion to "azmonitoring.coreos.com/v1" via Helm parameters
 - Pay special attention to service URI formats and required configuration parameters
 - Validate that all necessary parameters are included with proper placeholder values for sensitive information
 - Provide specific, actionable feedback for any issues found
-- Clearly state whether the plan is APPROVED or NEEDS IMPROVEMENT
-- If improvements are needed, provide detailed guidance on what to fix""".format(exporter_name=exporter_name or "service")
+- **REQUIRED**: You MUST use the approve_plan tool to make your final decision
+
+## Final Decision Required:
+After your evaluation, you MUST use the approve_plan tool to make your final decision. This tool requires:
+- approved: boolean (True if plan is ready for deployment, False if it needs improvement)
+- feedback: your detailed evaluation feedback explaining the decision
+- critical_issues: list of critical issues if not approved (optional but recommended)
+
+Example usage:
+- If approved: approve_plan(True, "Plan meets all Azure Managed Prometheus requirements and follows best practices...")
+- If rejected: approve_plan(False, "Plan has several critical issues that need attention...", ["Missing apiVersion override to azmonitoring.coreos.com/v1", "Incorrect service URI format"])
+
+**IMPORTANT**: Your evaluation is not complete until you call approve_plan() with your final decision.""".format(exporter_name=exporter_name or "service")
     
     return enhanced_prompt
 
@@ -94,6 +125,34 @@ class MonitoringFeedback(BaseModel):
     round_count: int = 0
     critic_approved: bool = False
     feedback_text: str = None
+
+class AlertingRules(BaseModel):
+    recommendation: str = None  # Full markdown response from agent
+    generic_recommended_alerting_rules: str = None  # Original YAML
+    az_compatible_recommended_alerting_rules: str = None  # Converted YAML
+
+def convert_to_azure_prom_rules(yaml_content: str) -> str:
+    """Convert generic Prometheus rules to Azure-compatible format."""
+    import subprocess
+    
+    try:
+        # Run: echo "yaml_content" | az-prom-rules-converter
+        result = subprocess.run(
+            ['az-prom-rules-converter'], 
+            input=yaml_content,
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=30  # 30 second timeout
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning(f"Azure conversion failed: {e}", extra={
+            'component': 'ai_graphs',
+            'operation': 'convert_to_azure_prom_rules',
+            'error': str(e)
+        })
+        return None
 
 class Workflow(BaseModel):
     thread_id: str = None
@@ -117,6 +176,7 @@ class Workflow(BaseModel):
     deployment_success: bool = None
 
     recommended_dashboards: dict[str, int] = None
+    recommended_alerting_rules: AlertingRules = None
 
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     """Detect workloads in the Kubernetes cluster."""
@@ -379,6 +439,8 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     
     if response:
         response_content = agent_utils.AgentManager.get_agent_response_content(response)
+        tool_calls = agent_utils.AgentManager.get_agent_tool_calls(response)
+        printer.out(tool_calls)
         if response_content:
             monitoring_plan = MonitoringPlan(markdown_plan=response_content)
             printer.success(f"Generated monitoring plan for {workload.name}")
@@ -424,6 +486,10 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # The workload name typically maps directly to the exporter name
     exporter_name = workload_name.lower()
     
+    # Create approval tool
+    approval_result = {"approved": False, "feedback": "", "issues": []}
+    approve_plan_tool = tools.create_plan_approval_tool(approval_result)
+    
     # Build enhanced system prompt with workload context and exporter information
     enhanced_system_prompt = build_enhanced_evaluator_prompt(workflow.verified_oss_workload, exporter_name)
     
@@ -447,30 +513,47 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     {previous_feedback}
     
     This is evaluation round {feedback.round_count} of {MAX_EVALUATION_ROUNDS}. 
-    Provide comprehensive feedback and determine if the plan should be approved or needs improvement.
+    Provide comprehensive feedback and use the approve_plan tool to make your final decision.
     Use the available tools to cross-reference the plan against the official Helm chart documentation.
+    
+    Remember: You MUST call approve_plan() with your final decision after evaluation.
     """
 
     # Run the critic agent with enhanced context and tools
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=evaluation_prompt,
         model=models.llm_4o,
-        tools=[tools.get_values_yaml, tools.get_chart_readme, tools.get_values_yaml_formatted],
+        tools=[tools.get_values_yaml, tools.get_chart_readme, tools.get_values_yaml_formatted, approve_plan_tool],
         agent_prompt=enhanced_system_prompt
     )
     
     if response:
-        feedback.feedback_text = agent_utils.AgentManager.get_agent_response_content(response)
+        tool_calls = agent_utils.AgentManager.get_agent_tool_calls(response)
+        printer.out(tool_calls)
         
-        if feedback.feedback_text:
+        # Check if the approval tool was called
+        if approval_result["feedback"]:
+            feedback.feedback_text = approval_result["feedback"]
+            feedback.critic_approved = approval_result["approved"]
+            
             printer.banner("Critic Feedback")
             printer.out(feedback.feedback_text)
+            
+            if approval_result["issues"]:
+                printer.out("\nCritical Issues Identified:")
+                for issue in approval_result["issues"]:
+                    printer.out(f"  • {issue}")
             printer.banner("Critic Feedback")
 
-            # The critic's response should indicate approval/disapproval
-            feedback.critic_approved = "approved" in feedback.feedback_text.lower()
             status_message = "✅ Monitoring plan approved by critic!" if feedback.critic_approved else "❌ Monitoring plan needs improvement."
             printer.success(status_message) if feedback.critic_approved else printer.warning(status_message)
+        else:
+            # Fallback if tool wasn't called - but still try to get text feedback
+            response_content = agent_utils.AgentManager.get_agent_response_content(response)
+            feedback.critic_approved = False  # Default to not approved if tool wasn't used
+            feedback.feedback_text = response_content or "Critic failed to use approval tool properly"
+            printer.warning("Critic did not use the approval tool. Defaulting to rejection.")
+            printer.out(feedback.feedback_text)
     else:
         feedback.critic_approved = False
         feedback.feedback_text = "Critic agent failed to generate feedback"
@@ -611,6 +694,76 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     print(f"Recommended Dashboards: {recommended_dashboards}")
     return {"recommended_dashboards": recommended_dashboards}
 
+def reccomend_alerting_rules(workflow: Workflow) -> dict[str, AlertingRules]:
+    """Recommend Prometheus alerting rules based on the structured monitoring plan."""
+    if not workflow.monitoring_plan or not workflow.monitoring_plan.structured_plan:
+        printer.error("No structured monitoring plan found to recommend alerting rules.")
+        return {"recommended_alerting_rules": None}
+
+    # Add interrupt to allow API query for alerting rule recommendations
+    get_recommendations = interrupt({
+        "message": "Ready to generate alerting rules recommendations. Call the API endpoint to proceed.",
+        "workload_name": workflow.verified_oss_workload.name if workflow.verified_oss_workload else "Unknown",
+        "monitoring_plan": workflow.monitoring_plan.markdown_plan
+    })
+
+    # If user chooses not to get recommendations, return None
+    if not get_recommendations:
+        printer.info("Alerting rules recommendations skipped.")
+        return {"recommended_alerting_rules": None}
+
+    analysis_prompt = f"""You need to recommend Prometheus alerting rules based on the monitoring plan for {workflow.verified_oss_workload.name}.
+
+    Here is the monitoring plan in markdown format:
+    {workflow.monitoring_plan.markdown_plan}
+
+    """
+    
+    recommended_alerting_rules = {}
+    add_alerting_rules = tools.create_add_alerting_rules_tool(recommended_alerting_rules)
+    
+    response, _ = agent_utils.AgentManager.create_and_run_agent(
+        prompt=analysis_prompt,
+        model=models.llm_5_mini,
+        tools=[add_alerting_rules],  # Add the tool
+        agent_prompt=prompts.FIND_ALERTING_RULES_PROMPT
+    )
+    
+    if response:
+        response_content = agent_utils.AgentManager.get_agent_response_content(response)
+        tool_calls = agent_utils.AgentManager.get_agent_tool_calls(response)
+        printer.out(tool_calls)
+        
+        # Get the YAML content from the tool
+        generic_yaml = recommended_alerting_rules.get("yaml_content", "")
+        
+        if response_content and generic_yaml:
+            printer.success("Recommended alerting rules generated successfully.")
+            printer.out(response_content)  # Still print the explanation
+            
+            # Convert to Azure format
+            printer.info("Converting alerting rules to Azure Managed Prometheus format...")
+            az_compatible_yaml = convert_to_azure_prom_rules(generic_yaml)
+            
+            if az_compatible_yaml:
+                printer.success("Successfully converted to Azure Managed Prometheus format.")
+            else:
+                printer.warning("Azure conversion failed. Using generic format with conversion instructions.")
+            
+            # Create the AlertingRules object
+            alerting_rules = AlertingRules(
+                recommendation=response_content,
+                generic_recommended_alerting_rules=generic_yaml,
+                az_compatible_recommended_alerting_rules=az_compatible_yaml
+            )
+            
+            print(f"Recommended Alerting Rules: {alerting_rules}")
+            return {"recommended_alerting_rules": alerting_rules}
+        else:
+            printer.warning("Agent response was empty, no alerting rules recommended.")
+    
+    return {"recommended_alerting_rules": None}
+
 # routers
 def route_before_planning(workflow: Workflow) -> bool:
     """Determine whether to proceed with plan generation or end workflow."""
@@ -648,6 +801,7 @@ def build_graph() -> StateGraph:
     builder.add_node("confirm_automated_monitoring_deployment", confirm_automated_monitoring_deployment)
     builder.add_node("deploy_structured_monitoring_plan", deploy_structured_monitoring_plan)
     builder.add_node("reccomend_dashboards", reccomend_dashboards)
+    builder.add_node("reccomend_alerting_rules", reccomend_alerting_rules)
 
     # EDGES
     # Pod Scanning and Workflow Identification Phase
@@ -684,7 +838,8 @@ def build_graph() -> StateGraph:
         {True: "deploy_structured_monitoring_plan", False: "reccomend_dashboards"},
     )
     builder.add_edge("deploy_structured_monitoring_plan", "reccomend_dashboards")
-    builder.add_edge("reccomend_dashboards", END)
+    builder.add_edge("reccomend_dashboards", "reccomend_alerting_rules")
+    builder.add_edge("reccomend_alerting_rules", END)
 
     checkpointer = MemorySaver()
     graph = builder.compile(checkpointer=checkpointer)

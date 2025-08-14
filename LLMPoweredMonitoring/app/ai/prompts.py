@@ -23,3 +23,4 @@ NEW_MONITORING_PLAN_GENERATION_PROMPT = load_prompt("new_monitoring_plan_generat
 MONITORING_PLAN_EVALUATOR_PROMPT = load_prompt("monitoring_plan_evaluator.md")
 STRUCTURE_MONITORING_PLAN_PROMPT = load_prompt("structure_monitoring_plan.md")
 FIND_GRAFANA_DASHBOARD_PROMPT = load_prompt("find_grafana_dashboard.md")
+FIND_ALERTING_RULES_PROMPT = load_prompt("find_alerting_rules.md")
