@@ -14,6 +14,10 @@ List of instruction objects with specific types and attributes.
 - **other**: Any other actionable instructions
   - Use: `create_add_instruction("other", "instruction content")`
 
+> Note: For Helm commands, if it is not already specified, please include the following commands:
+> - `helm repo add prometheus-community https://prometheus-community.github.io/helm-charts`
+> - `helm repo update`
+
 # Processing Rules
 1. Process top-down, one instruction per call
 2. Skip: Prerequisites, References, "(optional)" sections, explanatory text

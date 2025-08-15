@@ -2,7 +2,7 @@ FROM python:3.12-bookworm
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y gcc apt-transport-https ca-certificates curl gnupg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc apt-transport-https ca-certificates curl gnupg git  && rm -rf /var/lib/apt/lists/*
 
 # install kubectl
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \

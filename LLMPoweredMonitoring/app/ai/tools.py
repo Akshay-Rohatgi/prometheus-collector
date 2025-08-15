@@ -3,13 +3,19 @@ from .utils import gh_utils
 from .instructions import KubectlInstruction, HelmInstruction, CreateFileInstruction, OtherInstruction
 import re
 from printer import printer
-from typing import Dict
+from typing import Dict, List
 from mistletoe import Document
 from mistletoe.markdown_renderer import MarkdownRenderer
 import threading
+import os
+import glob
+import yaml
 from logs import get_logger, log_with_context
 
 logger = get_logger(__name__)
+
+# Constants
+AWESOME_ALERTS_BASE_PATH = "/opt/awesome-prometheus-alerts/dist/rules"
 
 # Global lock to serialize mistletoe usage (mistletoe is not thread-safe)
 _MD_LOCK = threading.Lock()
@@ -387,3 +393,297 @@ def create_plan_approval_tool(approval_result: dict) -> callable:
         return f"Plan evaluation complete: {status}"
     
     return approve_plan
+
+
+def get_awesome_rule_index() -> List[str]:
+    """Get the index of all available rule directories from awesome-prometheus-alerts.
+    
+    Returns a list of service names that have alerting rules available.
+    This helps narrow down which services have pre-built alerting rules.
+    
+    Returns:
+        List of directory names (service names) available in awesome-prometheus-alerts
+    """
+    printer.info("[tool-call] Getting awesome-prometheus-alerts rule index")
+    logger.info("Getting awesome-prometheus-alerts rule index", extra={
+        'component': 'ai_tools',
+        'operation': 'get_awesome_rule_index'
+    })
+    
+    try:
+        if not os.path.exists(AWESOME_ALERTS_BASE_PATH):
+            error_msg = "awesome-prometheus-alerts repository not found at /opt/awesome-prometheus-alerts. Please ensure it's cloned."
+            logger.warning(error_msg, extra={
+                'component': 'ai_tools',
+                'operation': 'get_awesome_rule_index',
+                'path_checked': AWESOME_ALERTS_BASE_PATH
+            })
+            return [f"Error: {error_msg}"]
+        
+        # Get all directories in the rules path
+        directories = []
+        for item in os.listdir(AWESOME_ALERTS_BASE_PATH):
+            item_path = os.path.join(AWESOME_ALERTS_BASE_PATH, item)
+            if os.path.isdir(item_path):
+                directories.append(item)
+        
+        directories.sort()  # Sort alphabetically for consistency
+        
+        if not directories:
+            logger.warning("No rule directories found in awesome-prometheus-alerts", extra={
+                'component': 'ai_tools',
+                'operation': 'get_awesome_rule_index',
+                'path_checked': AWESOME_ALERTS_BASE_PATH
+            })
+            return ["No rule directories found in awesome-prometheus-alerts"]
+        
+        logger.info(f"Found {len(directories)} rule directories", extra={
+            'component': 'ai_tools',
+            'operation': 'get_awesome_rule_index',
+            'directories_count': len(directories)
+        })
+        
+        return directories
+        
+    except Exception as e:
+        error_msg = f"Error reading awesome-prometheus-alerts index: {str(e)}"
+        logger.error(error_msg, extra={
+            'component': 'ai_tools',
+            'operation': 'get_awesome_rule_index',
+            'error': str(e)
+        })
+        return [error_msg]
+
+
+def get_awesome_rule(service_name: str) -> Dict[str, str]:
+    """Get all YAML rule files for a specific service from awesome-prometheus-alerts.
+    
+    Args:
+        service_name: The service name (directory name) to get rules for
+        
+    Returns:
+        Dictionary with yaml_file_name as key and yaml_content as value
+    """
+    printer.info(f"[tool-call] Getting awesome-prometheus-alerts rules for {service_name}")
+    logger.info(f"Getting awesome-prometheus-alerts rules for service", extra={
+        'component': 'ai_tools',
+        'operation': 'get_awesome_rule',
+        'service_name': service_name
+    })
+    
+    try:
+        service_path = os.path.join(AWESOME_ALERTS_BASE_PATH, service_name)
+        
+        if not os.path.exists(service_path):
+            error_msg = f"Service '{service_name}' not found in awesome-prometheus-alerts. Use get_awesome_rule_index() to see available services."
+            logger.warning(error_msg, extra={
+                'component': 'ai_tools',
+                'operation': 'get_awesome_rule',
+                'service_name': service_name,
+                'path_checked': service_path
+            })
+            return {"error": error_msg}
+        
+        if not os.path.isdir(service_path):
+            error_msg = f"'{service_name}' exists but is not a directory"
+            logger.warning(error_msg, extra={
+                'component': 'ai_tools',
+                'operation': 'get_awesome_rule',
+                'service_name': service_name,
+                'path_checked': service_path
+            })
+            return {"error": error_msg}
+        
+        # Find all .yml and .yaml files in the service directory
+        yaml_files = glob.glob(os.path.join(service_path, "*.yml")) + glob.glob(os.path.join(service_path, "*.yaml"))
+        
+        if not yaml_files:
+            error_msg = f"No YAML files found for service '{service_name}'"
+            logger.warning(error_msg, extra={
+                'component': 'ai_tools',
+                'operation': 'get_awesome_rule',
+                'service_name': service_name,
+                'yaml_files_count': 0
+            })
+            return {"error": error_msg}
+        
+        rule_contents = {}
+        successful_files = 0
+        
+        for yaml_file_path in yaml_files:
+            try:
+                with open(yaml_file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                # Validate it's actually valid YAML
+                try:
+                    yaml.safe_load(content)  # Just to validate, we return raw content
+                    successful_files += 1
+                except yaml.YAMLError as ye:
+                    logger.warning(f"YAML parse error in {yaml_file_path}: {str(ye)}", extra={
+                        'component': 'ai_tools',
+                        'operation': 'get_awesome_rule',
+                        'service_name': service_name,
+                        'file_path': yaml_file_path,
+                        'yaml_error': str(ye)
+                    })
+                    rule_contents[os.path.basename(yaml_file_path)] = f"# YAML Parse Error: {str(ye)}\n{content}"
+                    continue
+                
+                rule_contents[os.path.basename(yaml_file_path)] = content
+                
+            except Exception as e:
+                logger.error(f"Error reading file {yaml_file_path}: {str(e)}", extra={
+                    'component': 'ai_tools',
+                    'operation': 'get_awesome_rule',
+                    'service_name': service_name,
+                    'file_path': yaml_file_path,
+                    'error': str(e)
+                })
+                rule_contents[os.path.basename(yaml_file_path)] = f"# Error reading file: {str(e)}"
+        
+        if not rule_contents:
+            error_msg = f"Could not read any YAML files for service '{service_name}'"
+            logger.warning(error_msg, extra={
+                'component': 'ai_tools',
+                'operation': 'get_awesome_rule',
+                'service_name': service_name
+            })
+            return {"error": error_msg}
+        
+        logger.info(f"Successfully loaded {successful_files}/{len(yaml_files)} YAML files for {service_name}", extra={
+            'component': 'ai_tools',
+            'operation': 'get_awesome_rule',
+            'service_name': service_name,
+            'successful_files': successful_files,
+            'total_files': len(yaml_files)
+        })
+            
+        return rule_contents
+        
+    except Exception as e:
+        error_msg = f"Error accessing awesome-prometheus-alerts rules for '{service_name}': {str(e)}"
+        logger.error(error_msg, extra={
+            'component': 'ai_tools',
+            'operation': 'get_awesome_rule',
+            'service_name': service_name,
+            'error': str(e)
+        })
+        return {"error": error_msg}
+
+def fix_parameter_references(arm_template):
+    """Fix parameter references in ARM template by modifying the JSON structure directly."""
+    from logs import get_logger
+    
+    logger = get_logger(__name__)
+    
+    try:
+        # Fix location parameter default value
+        if 'parameters' in arm_template and 'location' in arm_template['parameters']:
+            if arm_template['parameters']['location'].get('defaultValue') != '[resourceGroup().location]':
+                arm_template['parameters']['location']['defaultValue'] = '[resourceGroup().location]'
+
+        # Process each resource
+        for resource in arm_template.get('resources', []):
+            # Fix location at resource level
+            if resource.get('location') != "[parameters('location')]":
+                resource['location'] = "[parameters('location')]"
+            
+            # Fix properties section
+            properties = resource.get('properties', {})
+            
+            # Fix clusterName
+            if properties.get('clusterName') != "[parameters('clusterName')]":
+                properties['clusterName'] = "[parameters('clusterName')]"
+            
+            # Fix scopes array
+            if 'scopes' in properties:
+                scopes = properties['scopes']
+                if not isinstance(scopes, list) or not scopes or scopes[0] != "[parameters('azureMonitorWorkspace')]":
+                    properties['scopes'] = ["[parameters('azureMonitorWorkspace')]"]
+            
+            # Fix rules array
+            for rule in properties.get('rules', []):
+                # Fix actions in alerting rules
+                for action in rule.get('actions', []):
+                    if action.get('actionGroupId') != "[parameters('actionGroupId')]":
+                        action['actionGroupId'] = "[parameters('actionGroupId')]"
+        
+        logger.info("Fixed parameter references in ARM template", extra={
+            'component': 'ai_tools',
+            'operation': 'fix_parameter_references',
+            'resources_processed': len(arm_template.get('resources', []))
+        })
+        
+        return arm_template
+    except Exception as e:
+        logger.error(f"Error fixing parameter references: {e}", extra={
+            'component': 'ai_tools',
+            'operation': 'fix_parameter_references',
+            'error': str(e)
+        })
+        # Return original template if fixing fails
+        return arm_template
+
+def convert_to_azure_prom_rules(yaml_content: str) -> str:
+    """Convert generic Prometheus rules to Azure-compatible format."""
+    import subprocess
+    import json
+    import os
+    from printer import printer
+    from logs import get_logger
+    
+    logger = get_logger(__name__)
+    
+    # write to temporary file /tmp/temp.yaml - use original content directly
+    if os.path.exists("/tmp/temp.yaml"):
+        os.remove("/tmp/temp.yaml")
+    with open("/tmp/temp.yaml", "w") as f:
+        f.write(yaml_content)  # Write original string directly, don't parse and re-dump
+    
+    try:
+        # Copy current environment and run converter
+        import copy
+        env = copy.deepcopy(os.environ)
+        
+        # Run: az-prom-rules-converter /tmp/temp.yaml from /tmp directory
+        result = subprocess.run(
+            ['az-prom-rules-converter', 'temp.yaml'],
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=30,  # 30 second timeout
+            cwd='/tmp',  # Run from /tmp directory
+            env=env  # Pass environment variables
+        )
+        os.remove("/tmp/temp.yaml")
+        
+        # Parse the JSON output and fix parameter references
+        try:
+            arm_template = json.loads(result.stdout.strip())
+            
+            # Apply our fixes to replace empty strings with proper parameter references
+            printer.out("Applying parameter reference fixes...")
+            # arm_template = fix_parameter_references(arm_template)
+            
+            # Convert back to JSON string
+            fixed_output = json.dumps(arm_template, indent=2)
+            printer.out("✅ ARM template parameter references fixed successfully!")
+            return fixed_output
+            
+        except json.JSONDecodeError:
+            # Fallback to original output if JSON parsing fails
+            printer.out("JSON parsing failed, returning original output:")
+            printer.out(result.stdout.strip())
+            return result.stdout.strip()
+            
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning(f"Azure conversion failed: {e}", extra={
+            'component': 'ai_tools',
+            'operation': 'convert_to_azure_prom_rules',
+            'error': str(e)
+        })
+        if os.path.exists("/tmp/temp.yaml"):
+            os.remove("/tmp/temp.yaml")
+        return None
+

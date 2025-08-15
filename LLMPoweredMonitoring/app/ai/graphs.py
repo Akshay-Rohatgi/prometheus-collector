@@ -12,6 +12,7 @@ from langgraph.constants import START, END
 from langgraph.checkpoint.memory import MemorySaver
 from logs import get_logger
 import time
+import os
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -131,28 +132,6 @@ class AlertingRules(BaseModel):
     generic_recommended_alerting_rules: str = None  # Original YAML
     az_compatible_recommended_alerting_rules: str = None  # Converted YAML
 
-def convert_to_azure_prom_rules(yaml_content: str) -> str:
-    """Convert generic Prometheus rules to Azure-compatible format."""
-    import subprocess
-    
-    try:
-        # Run: echo "yaml_content" | az-prom-rules-converter
-        result = subprocess.run(
-            ['az-prom-rules-converter'], 
-            input=yaml_content,
-            text=True,
-            capture_output=True,
-            check=True,
-            timeout=30  # 30 second timeout
-        )
-        return result.stdout.strip()
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning(f"Azure conversion failed: {e}", extra={
-            'component': 'ai_graphs',
-            'operation': 'convert_to_azure_prom_rules',
-            'error': str(e)
-        })
-        return None
 
 class Workflow(BaseModel):
     thread_id: str = None
@@ -432,7 +411,7 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Run the generation agent
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_4o,
+        model=models.llm_41,
         tools=[tools.get_chart_yaml_version, tools.get_values_yaml_formatted, tools.get_chart_readme, tools.search_values_keys],
         agent_prompt=prompts.NEW_MONITORING_PLAN_GENERATION_PROMPT
     )
@@ -522,7 +501,7 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Run the critic agent with enhanced context and tools
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=evaluation_prompt,
-        model=models.llm_4o,
+        model=models.llm_o3,
         tools=[tools.get_values_yaml, tools.get_chart_readme, tools.get_values_yaml_formatted, approve_plan_tool],
         agent_prompt=enhanced_system_prompt
     )
@@ -722,20 +701,27 @@ def reccomend_alerting_rules(workflow: Workflow) -> dict[str, AlertingRules]:
     recommended_alerting_rules = {}
     add_alerting_rules = tools.create_add_alerting_rules_tool(recommended_alerting_rules)
     
+    # Include the new awesome-prometheus-alerts tools
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_5_mini,
-        tools=[add_alerting_rules],  # Add the tool
+        model=models.llm_41,
+        tools=[
+            tools.get_awesome_rule_index,
+            tools.get_awesome_rule, 
+            add_alerting_rules
+        ],
         agent_prompt=prompts.FIND_ALERTING_RULES_PROMPT
     )
     
     if response:
         response_content = agent_utils.AgentManager.get_agent_response_content(response)
+        printer.out(response_content)
         tool_calls = agent_utils.AgentManager.get_agent_tool_calls(response)
         printer.out(tool_calls)
         
         # Get the YAML content from the tool
         generic_yaml = recommended_alerting_rules.get("yaml_content", "")
+        printer.out(generic_yaml)
         
         if response_content and generic_yaml:
             printer.success("Recommended alerting rules generated successfully.")
@@ -743,7 +729,7 @@ def reccomend_alerting_rules(workflow: Workflow) -> dict[str, AlertingRules]:
             
             # Convert to Azure format
             printer.info("Converting alerting rules to Azure Managed Prometheus format...")
-            az_compatible_yaml = convert_to_azure_prom_rules(generic_yaml)
+            az_compatible_yaml = tools.convert_to_azure_prom_rules(generic_yaml)
             
             if az_compatible_yaml:
                 printer.success("Successfully converted to Azure Managed Prometheus format.")
