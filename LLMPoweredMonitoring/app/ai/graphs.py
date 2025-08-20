@@ -411,7 +411,7 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Run the generation agent
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_41,
+        model=models.llm_5,
         tools=[tools.get_chart_yaml_version, tools.get_values_yaml_formatted, tools.get_chart_readme, tools.search_values_keys],
         agent_prompt=prompts.NEW_MONITORING_PLAN_GENERATION_PROMPT
     )
@@ -658,7 +658,7 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     """
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_5_mini,
+        model=models.llm_5,
         tools=[add_recommended_dashboard],
         agent_prompt=prompts.FIND_GRAFANA_DASHBOARD_PROMPT
     )
@@ -772,7 +772,7 @@ def route_after_confirmation(workflow: Workflow) -> bool:
     return bool(workflow.confirmed_to_plan)
 
 def build_graph() -> StateGraph:
-    builder = StateGraph(Workflow)
+    builder = StateGraph(Workflow) 
 
     # NODES
     builder.add_node("detect_workloads", detect_workloads)

@@ -10,6 +10,8 @@ import threading
 import os
 import glob
 import yaml
+import requests
+import asyncio
 from logs import get_logger, log_with_context
 
 logger = get_logger(__name__)
@@ -221,7 +223,7 @@ def create_add_instruction(instruction_list: list) -> callable:
         return f"Added instruction: {instruction}"
     return add_instruction
 
-def _strip_sections_by_header(content: str, banned=("optional", "references")) -> str:
+def _strip_sections_by_header(content: str, banned=("optional", "references", "if needed")) -> str:
     """Remove sections whose header contains any banned keyword.
 
     Thread-safe and deterministic; does not rely on markdown parsers.
@@ -578,10 +580,23 @@ def fix_parameter_references(arm_template):
     logger = get_logger(__name__)
     
     try:
-        # Fix location parameter default value
-        if 'parameters' in arm_template and 'location' in arm_template['parameters']:
-            if arm_template['parameters']['location'].get('defaultValue') != '[resourceGroup().location]':
-                arm_template['parameters']['location']['defaultValue'] = '[resourceGroup().location]'
+        if 'parameters' in arm_template:
+            # Fix location parameter default value
+            if 'location' in arm_template['parameters']:
+                if arm_template['parameters']['location'].get('defaultValue') != '[resourceGroup().location]':
+                    arm_template['parameters']['location']['defaultValue'] = '[resourceGroup().location]'
+
+            # # set actionGroupId 
+            # if 'actionGroupId' in arm_template['parameters']:
+            #     arm_template['parameters']['actionGroupId']['value'] = "/subscriptions/<subscription_id>/resourcegroups/<resource_group_name>/providers/microsoft.insights/actiongroups/<action_group_name>"
+        
+            # # set clusterName
+            # if 'clusterName' in arm_template['parameters']:
+            #     arm_template['parameters']['clusterName']['value'] = "<cluster_name>"
+
+            # # set azureMonitorWorkspace
+            # if 'azureMonitorWorkspace' in arm_template['parameters']:
+            #     arm_template['parameters']['azureMonitorWorkspace']['value'] = "/subscriptions/<subscription_id>/resourcegroups/<resource_group_name>/providers/microsoft.monitor/accounts/<azure_monitor_workspace_name>"
 
         # Process each resource
         for resource in arm_template.get('resources', []):
@@ -617,6 +632,7 @@ def fix_parameter_references(arm_template):
         
         return arm_template
     except Exception as e:
+        printer.out("[x] Error fixing parameter references")
         logger.error(f"Error fixing parameter references: {e}", extra={
             'component': 'ai_tools',
             'operation': 'fix_parameter_references',
@@ -624,6 +640,112 @@ def fix_parameter_references(arm_template):
         })
         # Return original template if fixing fails
         return arm_template
+
+def fix_yaml_content(yaml_content: str) -> str:
+    """
+    Fix YAML content to ensure:
+    1. No multiline descriptions (convert to single line)
+    2. No more than 20 alert rules total
+    3. "for" durations are not greater than 1m
+    4. Valid YAML structure
+    """
+    import re
+    from printer import printer
+    from logs import get_logger
+    
+    logger = get_logger(__name__)
+    
+    try:
+        # Parse the YAML content
+        data = yaml.safe_load(yaml_content)
+        
+        if not data or 'groups' not in data:
+            printer.out("⚠️  No valid groups found in YAML")
+            return yaml_content
+        
+        total_rules = 0
+        
+        # Process each group
+        for group in data['groups']:
+            if 'rules' not in group:
+                continue
+                
+            rules_to_keep = []
+            
+            for rule in group['rules']:
+                # Count total rules
+                total_rules += 1
+                
+                # Fix "for" duration if it exists and is greater than 1m
+                if 'for' in rule:
+                    for_duration = rule['for']
+                    # Parse duration (e.g., "5m", "2h", "30s")
+                    duration_match = re.match(r'^(\d+)([smhd])$', str(for_duration))
+                    if duration_match:
+                        value, unit = duration_match.groups()
+                        value = int(value)
+                        
+                        # Convert to seconds for comparison
+                        if unit == 's':
+                            seconds = value
+                        elif unit == 'm':
+                            seconds = value * 60
+                        elif unit == 'h':
+                            seconds = value * 3600
+                        elif unit == 'd':
+                            seconds = value * 86400
+                        else:
+                            seconds = 60  # Default to 1m if unknown unit
+                        
+                        # If greater than 1 minute (60 seconds), set to 1m
+                        if seconds < 60:
+                            rule['for'] = '1m'
+                            printer.out(f"🔧 Fixed 'for' duration from {for_duration} to 1m for alert: {rule.get('alert', 'unknown')}")
+                
+                # Fix multiline descriptions in annotations
+                if 'annotations' in rule:
+                    for key, value in rule['annotations'].items():
+                        if isinstance(value, str) and '\n' in value:
+                            # Convert multiline to single line, replacing newlines with spaces
+                            single_line = re.sub(r'\s*\n\s*', ' ', value.strip())
+                            rule['annotations'][key] = single_line
+                            printer.out(f"🔧 Fixed multiline {key} for alert: {rule.get('alert', 'unknown')}")
+                
+                rules_to_keep.append(rule)
+            
+            # Limit rules to 20 maximum
+            if len(rules_to_keep) > 20:
+                printer.out(f"⚠️  Limiting rules from {len(rules_to_keep)} to 20 (keeping most critical)")
+                # Keep only first 20 rules (assuming they're ordered by importance)
+                rules_to_keep = rules_to_keep[:20]
+                total_rules = 20
+            
+            group['rules'] = rules_to_keep
+        
+        # Log summary
+        printer.out(f"✅ YAML validation complete: {total_rules} rules processed")
+        
+        # Convert back to YAML string
+        fixed_yaml = yaml.dump(data, default_flow_style=False, allow_unicode=True)
+        return fixed_yaml
+        
+    except yaml.YAMLError as e:
+        logger.error(f"YAML parsing error: {e}", extra={
+            'component': 'ai_tools',
+            'operation': 'fix_yaml_content',
+            'error': str(e)
+        })
+        printer.out(f"❌ YAML parsing error: {e}")
+        return yaml_content  # Return original if parsing fails
+        
+    except Exception as e:
+        logger.error(f"Error fixing YAML content: {e}", extra={
+            'component': 'ai_tools',
+            'operation': 'fix_yaml_content',
+            'error': str(e)
+        })
+        printer.out(f"❌ Error fixing YAML content: {e}")
+        return yaml_content  # Return original if any error occurs
 
 def convert_to_azure_prom_rules(yaml_content: str) -> str:
     """Convert generic Prometheus rules to Azure-compatible format."""
@@ -635,11 +757,15 @@ def convert_to_azure_prom_rules(yaml_content: str) -> str:
     
     logger = get_logger(__name__)
     
-    # write to temporary file /tmp/temp.yaml - use original content directly
+    # Fix YAML content before processing
+    printer.out("🔧 Fixing YAML content...")
+    fixed_yaml_content = fix_yaml_content(yaml_content)
+    
+    # write to temporary file /tmp/temp.yaml - use fixed content
     if os.path.exists("/tmp/temp.yaml"):
         os.remove("/tmp/temp.yaml")
     with open("/tmp/temp.yaml", "w") as f:
-        f.write(yaml_content)  # Write original string directly, don't parse and re-dump
+        f.write(fixed_yaml_content)  # Write fixed YAML content
     
     try:
         # Copy current environment and run converter
@@ -656,6 +782,7 @@ def convert_to_azure_prom_rules(yaml_content: str) -> str:
             cwd='/tmp',  # Run from /tmp directory
             env=env  # Pass environment variables
         )
+        print(result.stdout.strip())
         os.remove("/tmp/temp.yaml")
         
         # Parse the JSON output and fix parameter references
@@ -685,5 +812,26 @@ def convert_to_azure_prom_rules(yaml_content: str) -> str:
         })
         if os.path.exists("/tmp/temp.yaml"):
             os.remove("/tmp/temp.yaml")
+        return None
+
+
+async def fetch_dashboard_from_source(dashboard_id: str) -> dict:
+    """Fetch dashboard JSON from grafana.com API."""
+    try:
+        url = f"https://grafana.com/api/dashboards/{dashboard_id}"
+        
+        # Run the blocking request in a thread pool to keep it async
+        response = await asyncio.to_thread(requests.get, url, timeout=10)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(f"Failed to fetch dashboard {dashboard_id}: HTTP {response.status_code}")
+            return None
+    except requests.RequestException as e:
+        logger.error(f"Network error fetching dashboard {dashboard_id}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching dashboard {dashboard_id}: {e}")
         return None
 

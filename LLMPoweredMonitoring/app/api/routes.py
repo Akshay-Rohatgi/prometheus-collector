@@ -1,4 +1,5 @@
 from ai.graphs import get_graph
+from ai.tools import fetch_dashboard_from_source
 from core import workflow
 from pydantic import BaseModel
 from langgraph.types import Command
@@ -607,3 +608,22 @@ async def get_alerting_rules_recommendations(thread_id: str, request: getAlertin
         await cleanup_workflow_graph(thread_id)
         error_message = f"Error processing alerting rules recommendations: {str(e)}"
         raise HTTPException(status_code=500, detail=error_message)
+
+
+@app.get("/dashboard/{dashboard_id}/json")
+async def get_dashboard_json(dashboard_id: str):
+    """Fetch dashboard JSON from Grafana.com"""
+    try:
+        dashboard_json = await fetch_dashboard_from_source(dashboard_id)
+        if dashboard_json:
+            return {"dashboard": dashboard_json, "dashboard_id": dashboard_id}
+        else:
+            raise HTTPException(status_code=404, detail=f"Dashboard {dashboard_id} not found")
+    except Exception as e:
+        logger.error(f"Error fetching dashboard {dashboard_id}", extra={
+            'component': 'api',
+            'operation': 'get_dashboard_json',
+            'dashboard_id': dashboard_id,
+            'error': str(e)
+        })
+        raise HTTPException(status_code=500, detail=f"Error fetching dashboard: {str(e)}")

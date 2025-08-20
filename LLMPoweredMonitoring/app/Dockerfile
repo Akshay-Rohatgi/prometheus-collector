@@ -22,7 +22,7 @@ RUN adduser --disabled-password --gecos '' appuser && chown -R appuser:appuser /
 USER appuser
 
 # set environment variables
-ENV DEBUG_MODE false
+ENV DEBUG_MODE true
 ENV ENABLE_FILE_LOGGING false
 
 EXPOSE 8000

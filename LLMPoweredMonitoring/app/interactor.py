@@ -212,7 +212,7 @@ if approve_plan == "yes" or len(approve_plan) == 0:
                     if alerting_rules_data.get("az_compatible_recommended_alerting_rules"):
                         client_print("\n🚨 Azure Managed Prometheus Alerting Rules:")
                         console.print("─" * 80)
-                        print(f"```yaml\n{alerting_rules_data['az_compatible_recommended_alerting_rules']}\n```")
+                        print(f"```json\n{alerting_rules_data['az_compatible_recommended_alerting_rules']}\n```")
                         console.print("─" * 80)
                         client_print("💡 These rules are ready to use with Azure Managed Prometheus.")
                     
@@ -220,7 +220,7 @@ if approve_plan == "yes" or len(approve_plan) == 0:
                     elif alerting_rules_data.get("generic_recommended_alerting_rules"):
                         client_print("\n🚨 Generic Prometheus Alerting Rules:")
                         console.print("─" * 80)
-                        console.print(f"```yaml\n{alerting_rules_data['generic_recommended_alerting_rules']}\n```")
+                        console.print(f"```json\n{alerting_rules_data['generic_recommended_alerting_rules']}\n```")
                         console.print("─" * 80)
                         client_print("⚠️  Azure conversion failed. Use the converter tool:")
                         client_print("🔗 https://github.com/Azure/prometheus-collector/tree/main/tools/az-prom-rules-converter")
