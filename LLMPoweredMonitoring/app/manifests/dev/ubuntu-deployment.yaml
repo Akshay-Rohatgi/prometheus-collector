@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubuntu-dev-container
+  namespace: llm-powered-monitoring-dev
+  labels:
+    app: ubuntu-dev-container
+    environment: development
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubuntu-dev-container
+  template:
+    metadata:
+      labels:
+        app: ubuntu-dev-container
+    spec:
+      serviceAccountName: llm-powered-monitoring-sa
+      securityContext:
+        # Allow running as root for development
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+      containers:
+      - name: ubuntu-dev
+        image: ubuntu:24.04
+        command: ["/bin/bash"]
+        args: ["-c", "apt-get update && apt-get install -y curl wget git vim nano htop procps net-tools iputils-ping && sleep infinity"]
+        securityContext:
+          # Run as root
+          runAsUser: 0
+          runAsGroup: 0
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - NET_ADMIN
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        env:
+        - name: DEBIAN_FRONTEND
+          value: "noninteractive"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: workspace
+          mountPath: /workspace
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: workspace
+        emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ubuntu-dev-service
+  namespace: llm-powered-monitoring-dev
+  labels:
+    app: ubuntu-dev-container
+spec:
+  selector:
+    app: ubuntu-dev-container
+  ports:
+  - name: ssh
+    port: 22
+    targetPort: 22
+    protocol: TCP
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP

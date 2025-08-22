@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-powered-monitoring-dev
+  labels:
+    name: llm-powered-monitoring-dev
+    environment: development
