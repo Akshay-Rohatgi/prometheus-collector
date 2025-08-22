@@ -2,7 +2,7 @@ FROM python:3.12-bookworm
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y gcc apt-transport-https ca-certificates curl gnupg git  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc apt-transport-https ca-certificates curl gnupg git nodejs npm && rm -rf /var/lib/apt/lists/*
 
 # install kubectl
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
@@ -12,6 +12,8 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 # add prometheus-community repository
 RUN helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+RUN git clone https://github.com/samber/awesome-prometheus-alerts.git /opt/awesome-prometheus-alerts
+RUN npm i -g https://gitpkg.now.sh/Azure/prometheus-collector/tools/az-prom-rules-converter?main
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -19,11 +21,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN adduser --disabled-password --gecos '' appuser && chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /opt/awesome-prometheus-alerts
 USER appuser
 
 # set environment variables
-ENV DEBUG_MODE true
-ENV ENABLE_FILE_LOGGING false
+ENV DEBUG_MODE=true
+ENV ENABLE_FILE_LOGGING=false
 
 EXPOSE 8000
 
