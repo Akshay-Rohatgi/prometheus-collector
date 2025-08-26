@@ -257,13 +257,17 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
                 detected_oss_workload_names
             )
             
+            # Deduplicate workloads with the same pretty_name (e.g., kafka-bootstrap and kafka-brokers both as 'kafka')
+            detected_oss_workloads = workload_utils.deduplicate_oss_workloads(detected_oss_workloads)
+            
             duration_ms = round((time.time() - start_time) * 1000, 2)
             logger.info("OSS workload detection completed", extra={
                 'component': 'ai_graphs',
                 'operation': 'detect_oss_workloads',
                 'workflow_phase': 'oss-detection',
                 'duration_ms': duration_ms,
-                'oss_workloads_detected': len(detected_oss_workloads)
+                'oss_workloads_detected': len(detected_oss_workloads),
+                'original_detections': len(detected_oss_workload_names)
             })
             
             print_utils.print_workload_list(
@@ -300,9 +304,17 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
         'available_workloads': len(workflow.detected_oss_workloads or {})
     })
     
-    selected_workload_name = interrupt(
-        {"detected_oss_workloads": list(workflow.detected_oss_workloads.keys())}
-    )
+    # Create a display-friendly structure for the interrupt
+    workload_choices = {}
+    for pretty_name, workload in workflow.detected_oss_workloads.items():
+        workload_choices[pretty_name] = {
+            "pretty_name": pretty_name,
+            "service_name": workload.name,
+            "namespace": workload.namespace,
+            "service_type": workload.service_type
+        }
+    
+    selected_workload_name = interrupt({"detected_oss_workloads": workload_choices})
 
     if not selected_workload_name:
         logger.warning("No workload selected by user", extra={
@@ -319,7 +331,10 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     selected_oss_workload = workflow.detected_oss_workloads.get(selected_workload_name)
     
     if selected_oss_workload:
-        printer.success(f"✅ Selected OSS Workload: {selected_oss_workload.name}")
+        if hasattr(selected_oss_workload, 'pretty_name') and selected_oss_workload.pretty_name:
+            printer.success(f"✅ Selected OSS Workload: {selected_oss_workload.pretty_name} ({selected_oss_workload.name})")
+        else:
+            printer.success(f"✅ Selected OSS Workload: {selected_oss_workload.name}")
     else:
         printer.warning("No valid workload selected")
 
@@ -368,19 +383,23 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     is_improvement = (workflow.monitoring_plan_feedback is not None and workflow.monitoring_plan_feedback.round_count > 0)
     round_number = workflow.monitoring_plan_feedback.round_count if workflow.monitoring_plan_feedback else 1
 
+    # Get display name for logging
+    display_name = workload.pretty_name if hasattr(workload, 'pretty_name') and workload.pretty_name else workload.name
+
     # Log plan generation start (system event)
     logger.info("Monitoring plan generation started", extra={
         'component': 'ai_graphs',
         'operation': 'generate_monitoring_deployment_plan',
         'workflow_phase': 'monitoring-plan-generation',
         'workload_name': workload.name,
+        'pretty_name': getattr(workload, 'pretty_name', None),
         'is_improvement': is_improvement,
         'round_number': round_number
     })
 
     message = "Improving" if is_improvement else "Generating"
     printer.info(
-        f"{message} monitoring deployment plan for {workload.name}"
+        f"{message} monitoring deployment plan for {display_name}"
         + (f" (Round {round_number})" if is_improvement else "")
     )
 
@@ -422,7 +441,7 @@ def generate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
         printer.out(tool_calls)
         if response_content:
             monitoring_plan = MonitoringPlan(markdown_plan=response_content)
-            printer.success(f"Generated monitoring plan for {workload.name}")
+            printer.success(f"Generated monitoring plan for {display_name}")
         else:
             printer.warning("Agent response was empty, generating fallback plan")
             monitoring_plan = MonitoringPlan(

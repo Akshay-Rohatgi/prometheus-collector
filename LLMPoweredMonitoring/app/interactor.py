@@ -42,14 +42,23 @@ client_print(f"Detected OSS workloads: {response_with_detected_oss_workloads['de
 # Check initial status
 check_workflow_status(thread_id)
 
-i = 0
-for workload in response_with_detected_oss_workloads["detected_oss_workloads"]:
-    client_print(f"{i}. {workload}")
-    i += 1
+workloads_payload = response_with_detected_oss_workloads.get("detected_oss_workloads", {})
+workload_keys = list(workloads_payload.keys())
+
+# If payload is a list (legacy), convert to keys
+if isinstance(workloads_payload, list):
+    workload_keys = [str(w) for w in workloads_payload]
+
+for idx, key in enumerate(workload_keys):
+    val = workloads_payload[key] if isinstance(workloads_payload, dict) else key
+    if isinstance(val, dict) and val.get("service_name"):
+        client_print(f"{idx}. {val.get('pretty_name', key)} ({val['service_name']}) in {val.get('namespace', '')}")
+    else:
+        client_print(f"{idx}. {key}")
 
 selected_indices = input("Which workloads would you like to select? (comma-separated indices): ").split(",")
 
-selected_workloads = [response_with_detected_oss_workloads["detected_oss_workloads"][int(index.strip())] for index in selected_indices]
+selected_workloads = [workload_keys[int(index.strip())] for index in selected_indices]
 response = requests.post(f"{BASE_URL}/select_oss_workloads/{thread_id}", json={"selected_workloads": selected_workloads})
 if response.status_code != 200:
     client_print(f"❌ Error selecting workloads: {response.json()}")

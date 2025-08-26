@@ -34,10 +34,14 @@ def print_workload_list(title: str, workloads: dict, emoji: str = "🔨") -> Non
         emoji: The emoji to use for each workload (default: 🔨)
     """
     printer.banner(title)
-    printer.out(
-        "\n".join(
-            f"{emoji} {name} in {workload.namespace}"
-            for name, workload in workloads.items()
-        )
-    )
+    formatted_lines = []
+    for name, workload in workloads.items():
+        if hasattr(workload, 'pretty_name') and workload.pretty_name:
+            # Show pretty name prominently with service name in parentheses
+            formatted_lines.append(f"{emoji} {workload.pretty_name} ({workload.name}) in {workload.namespace}")
+        else:
+            # Fallback to original format
+            formatted_lines.append(f"{emoji} {name} in {workload.namespace}")
+    
+    printer.out("\n".join(formatted_lines))
     printer.banner(title)

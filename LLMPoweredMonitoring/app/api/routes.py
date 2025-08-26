@@ -167,6 +167,26 @@ async def start_workflow():
         if "__interrupt__" in result:
             status.active = True
             status.phase = "workload-selection"
+
+            # Extract the interrupt payload produced by the graph (already JSON-safe)
+            interrupt_payload = result["__interrupt__"][0].value or {}
+            detected_workloads_payload = interrupt_payload.get("detected_oss_workloads", {})
+
+            # Defensive: if values are Pydantic models, normalize; if they are dicts, pass through
+            formatted_workloads = {}
+            if isinstance(detected_workloads_payload, dict):
+                for key, val in detected_workloads_payload.items():
+                    if hasattr(val, "name"):  # Workload object
+                        formatted_workloads[key] = {
+                            "pretty_name": getattr(val, "pretty_name", key),
+                            "service_name": val.name,
+                            "namespace": val.namespace,
+                            "service_type": val.service_type,
+                            "ports": val.service_ports,
+                        }
+                    elif isinstance(val, dict):
+                        # Already structured by the workflow; keep as-is
+                        formatted_workloads[key] = val
             
             # Log workflow interruption for user selection (system event)
             logger.info("Workflow interrupted for workload selection", extra={
@@ -174,12 +194,12 @@ async def start_workflow():
                 'operation': 'workflow_interrupt',
                 'thread_id': thread_id,
                 'workflow_phase': 'workload-selection',
-                'detected_workloads': len(result["__interrupt__"][0].value.get("detected_oss_workloads", []))
+                'detected_workloads': len(formatted_workloads)
             })
-            
+
             return {
                 "thread_id": thread_id,
-                "detected_oss_workloads": result["__interrupt__"][0].value["detected_oss_workloads"],
+                "detected_oss_workloads": formatted_workloads,
             }
         else:
             # Log workflow error (system event)
@@ -218,8 +238,8 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
         })
         raise HTTPException(status_code=400, detail="No active workflow found for this thread_id")
 
-    selected_workloads_names = request.selected_workloads
-    if not selected_workloads_names:
+    selected_pretty_names = request.selected_workloads
+    if not selected_pretty_names:
         logger.warning("Empty workload selection received", extra={
             'component': 'api',
             'operation': 'select_oss_workloads',
@@ -232,11 +252,11 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
         'component': 'api',
         'operation': 'select_oss_workloads',
         'thread_id': thread_id,
-        'selected_workloads': selected_workloads_names,
-        'workload_count': len(selected_workloads_names)
+        'selected_pretty_names': selected_pretty_names,
+        'workload_count': len(selected_pretty_names)
     })
     
-    printer.info(f"Selected OSS workloads for {thread_id}: {selected_workloads_names}")
+    printer.info(f"Selected OSS workloads for {thread_id}: {selected_pretty_names}")
     
     try:
         # Get workflow-specific graph instance
@@ -245,7 +265,7 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
         # Run the potentially blocking graph.invoke in a thread pool
         await asyncio.to_thread(
             workflow_graph.invoke,
-            Command(resume=selected_workloads_names),
+            Command(resume=selected_pretty_names),
             status.config
         )
         
@@ -259,7 +279,7 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
             'to_phase': 'monitoring-plan-generation'
         })
         
-        return {"message": "Selected OSS workload successfully", "selected_oss_workload": selected_workloads_names}
+        return {"message": "Selected OSS workload successfully", "selected_oss_workload": selected_pretty_names}
     except Exception as e:
         # Log workflow error (system event)
         logger.error("Error processing workload selection", extra={
@@ -267,7 +287,7 @@ async def select_oss_workloads(thread_id: str, request: selectOssWorkloadsReques
             'operation': 'select_oss_workloads',
             'thread_id': thread_id,
             'error': str(e),
-            'selected_workloads': selected_workloads_names
+            'selected_workloads': selected_pretty_names
         })
         raise HTTPException(status_code=500, detail=f"Error selecting OSS workloads: {str(e)}")
 

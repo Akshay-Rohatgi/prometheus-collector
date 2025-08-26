@@ -35,6 +35,7 @@ class Workload(BaseModel):
 
     # Optional fields for future extension
     # workload_type: Optional[str] = "deployment"  # could be "statefulset", "daemonset", etc.
+    pretty_name: Optional[str] = None  # Human-readable name like "kafka", "elasticsearch"
     is_oss: Optional[bool] = None
     monitoring_config: Optional[Dict] = None
 

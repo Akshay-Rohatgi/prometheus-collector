@@ -154,15 +154,25 @@ def search_values_keys(exporter_name: str, regex_pattern: str) -> dict:
 
 def create_add_oss_workload_tool(detected_oss_workload_names: list) -> callable:
     """Create the add_oss_workload tool function."""
-    def add_oss_workload(workload_name: str) -> str:
-        """Add a workload name to the detected OSS workloads list."""
-        printer.info(f"[tool-call] Adding {workload_name} to detected OSS workloads")
-        detected_oss_workload_names.append(workload_name.lower())
-        logger.info(f"Adding {workload_name} to detected OSS workloads", extra={
-            'component': 'workflow',
-            'operation': 'add_oss_workload'
+    def add_oss_workload(workload_name: str, pretty_workload_name: str) -> str:
+        """Add a workload name to the detected OSS workloads list with a pretty name.
+        
+        Args:
+            workload_name: The exact service name from Kubernetes (e.g., "kafka-brokers", "quickstart-es-default")
+            pretty_workload_name: Human-readable name for the workload (e.g., "kafka", "elasticsearch", "nginx")
+        """
+        printer.info(f"[tool-call] Adding {workload_name} as '{pretty_workload_name}' to detected OSS workloads")
+        detected_oss_workload_names.append({
+            "workload_name": workload_name.lower(),
+            "pretty_name": pretty_workload_name.lower()
         })
-        return f"Added {workload_name} to the detected OSS workloads list"
+        logger.info(f"Adding {workload_name} as '{pretty_workload_name}' to detected OSS workloads", extra={
+            'component': 'workflow',
+            'operation': 'add_oss_workload',
+            'workload_name': workload_name,
+            'pretty_name': pretty_workload_name
+        })
+        return f"Added {workload_name} as OSS workload with pretty name '{pretty_workload_name}'"
     return add_oss_workload
 
 def create_add_recommended_dashboard_tool(recommended_dashboards: dict) -> callable:
@@ -307,9 +317,13 @@ For each workload you identify as a major OSS project (HIGH confidence), use the
     return analysis_prompt
 
 def generate_monitoring_plan_prompt(workload: k8s.client.Workload) -> str:
+    pretty_name_info = ""
+    if hasattr(workload, 'pretty_name') and workload.pretty_name:
+        pretty_name_info = f"\n    - Pretty Name: {workload.pretty_name}"
+    
     workload_info = f"""
     Workload Information (Service):
-    - Name: {workload.name}
+    - Name: {workload.name}{pretty_name_info}
     - Namespace: {workload.namespace}
     - Metadata Name: {workload.metadata_name}
     - Labels: {workload.metadata_labels}
@@ -818,8 +832,8 @@ def convert_to_azure_prom_rules(yaml_content: str) -> str:
 async def fetch_dashboard_from_source(dashboard_id: str) -> dict:
     """Fetch dashboard JSON from grafana.com API."""
     try:
-        url = f"https://grafana.com/api/dashboards/{dashboard_id}"
-        
+        url = f"https://grafana.com/api/dashboards/{dashboard_id}/revisions/latest/download"
+
         # Run the blocking request in a thread pool to keep it async
         response = await asyncio.to_thread(requests.get, url, timeout=10)
         
