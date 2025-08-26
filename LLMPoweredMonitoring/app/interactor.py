@@ -59,6 +59,7 @@ for idx, key in enumerate(workload_keys):
 selected_indices = input("Which workloads would you like to select? (comma-separated indices): ").split(",")
 
 selected_workloads = [workload_keys[int(index.strip())] for index in selected_indices]
+print(selected_workloads)
 response = requests.post(f"{BASE_URL}/select_oss_workloads/{thread_id}", json={"selected_workloads": selected_workloads})
 if response.status_code != 200:
     client_print(f"❌ Error selecting workloads: {response.json()}")

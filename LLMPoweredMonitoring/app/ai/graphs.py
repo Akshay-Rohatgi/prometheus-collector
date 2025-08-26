@@ -257,17 +257,13 @@ def detect_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
                 detected_oss_workload_names
             )
             
-            # Deduplicate workloads with the same pretty_name (e.g., kafka-bootstrap and kafka-brokers both as 'kafka')
-            detected_oss_workloads = workload_utils.deduplicate_oss_workloads(detected_oss_workloads)
-            
             duration_ms = round((time.time() - start_time) * 1000, 2)
             logger.info("OSS workload detection completed", extra={
                 'component': 'ai_graphs',
                 'operation': 'detect_oss_workloads',
                 'workflow_phase': 'oss-detection',
                 'duration_ms': duration_ms,
-                'oss_workloads_detected': len(detected_oss_workloads),
-                'original_detections': len(detected_oss_workload_names)
+                'oss_workloads_detected': len(detected_oss_workloads)
             })
             
             print_utils.print_workload_list(
@@ -305,18 +301,20 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
     })
     
     # Create a display-friendly structure for the interrupt
+    # Keys are still original workload names, but we display pretty names
     workload_choices = {}
-    for pretty_name, workload in workflow.detected_oss_workloads.items():
-        workload_choices[pretty_name] = {
+    for workload_key, workload in workflow.detected_oss_workloads.items():
+        pretty_name = getattr(workload, 'pretty_name', workload.name)
+        workload_choices[workload_key] = {
             "pretty_name": pretty_name,
             "service_name": workload.name,
             "namespace": workload.namespace,
             "service_type": workload.service_type
         }
     
-    selected_workload_name = interrupt({"detected_oss_workloads": workload_choices})
+    selected_workload_key = interrupt({"detected_oss_workloads": workload_choices})
 
-    if not selected_workload_name:
+    if not selected_workload_key:
         logger.warning("No workload selected by user", extra={
             'component': 'ai_graphs',
             'operation': 'select_oss_workloads',
@@ -325,10 +323,10 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
         return {"selected_oss_workload": None}
 
     # Since we're selecting only one workload, get the first one from the list
-    if isinstance(selected_workload_name, list) and len(selected_workload_name) > 0:
-        selected_workload_name = selected_workload_name[0]
+    if isinstance(selected_workload_key, list) and len(selected_workload_key) > 0:
+        selected_workload_key = selected_workload_key[0]
     
-    selected_oss_workload = workflow.detected_oss_workloads.get(selected_workload_name)
+    selected_oss_workload = workflow.detected_oss_workloads.get(selected_workload_key)
     
     if selected_oss_workload:
         if hasattr(selected_oss_workload, 'pretty_name') and selected_oss_workload.pretty_name:
@@ -541,7 +539,7 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
                 printer.out("\nCritical Issues Identified:")
                 for issue in approval_result["issues"]:
                     printer.out(f"  • {issue}")
-            printer.banner("Critic Feedback")
+            printer.banner("Critic Feedback")confi
 
             status_message = "✅ Monitoring plan approved by critic!" if feedback.critic_approved else "❌ Monitoring plan needs improvement."
             printer.success(status_message) if feedback.critic_approved else printer.warning(status_message)

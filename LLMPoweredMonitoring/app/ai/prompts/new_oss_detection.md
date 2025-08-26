@@ -78,12 +78,6 @@ You are looking for the main service endpoints of OSS applications, not their su
 - ✅ "elasticsearch-master" (core Elasticsearch service)
 - ❌ "elasticsearch-metrics" (metrics collection)
 
-**IMPORTANT - AVOID DUPLICATES:**
-If you see multiple services for the same OSS project (e.g., kafka-bootstrap, kafka-brokers, kafka-connect), only select ONE representative service per project. Choose the most central/primary service:
-- For Kafka: prefer kafka-bootstrap or kafka-brokers over kafka-connect
-- For Elasticsearch: prefer elasticsearch-master over elasticsearch-data
-- For databases: prefer the main service over read replicas
-
 DECISION PROCESS:
 For each service, provide your analysis and confidence level. Only invoke the add_oss_workload tool for services you have HIGH or MEDIUM confidence are major, first-class OSS core services (not exporters or support components).
 
@@ -98,7 +92,6 @@ When you identify an OSS workload, use the add_oss_workload tool with BOTH param
 
 ### Pretty Name Guidelines:
 - Use lowercase, single-word names when possible
-- **CRITICAL**: Each pretty name should be unique - don't use the same pretty name for multiple services
 - Common mappings:
   * kafka-*, *-kafka-* → "kafka"
   * elasticsearch-*, *-es-*, *-elastic* → "elasticsearch"  
