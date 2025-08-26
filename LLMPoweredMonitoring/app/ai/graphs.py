@@ -677,7 +677,7 @@ def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
     """
     response, _ = agent_utils.AgentManager.create_and_run_agent(
         prompt=analysis_prompt,
-        model=models.llm_5,
+        model=models.llm_4o,
         tools=[add_recommended_dashboard],
         agent_prompt=prompts.FIND_GRAFANA_DASHBOARD_PROMPT
     )
