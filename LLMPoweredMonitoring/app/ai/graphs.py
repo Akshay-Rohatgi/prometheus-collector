@@ -539,7 +539,7 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
                 printer.out("\nCritical Issues Identified:")
                 for issue in approval_result["issues"]:
                     printer.out(f"  • {issue}")
-            printer.banner("Critic Feedback")confi
+            printer.banner("Critic Feedback")
 
             status_message = "✅ Monitoring plan approved by critic!" if feedback.critic_approved else "❌ Monitoring plan needs improvement."
             printer.success(status_message) if feedback.critic_approved else printer.warning(status_message)
