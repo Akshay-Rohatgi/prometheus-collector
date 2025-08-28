@@ -655,6 +655,62 @@ def fix_parameter_references(arm_template):
         # Return original template if fixing fails
         return arm_template
 
+
+def _sanitize_yaml_templates(yaml_content: str) -> str:
+    """
+    Quote annotation values that contain template braces like {{ ... }} to avoid YAML parse errors.
+    Only affects scalar lines under 'annotations:' blocks that are not already quoted or block scalars.
+    """
+    lines = yaml_content.splitlines()
+    out = []
+    in_annotations = False
+    annotations_indent = None
+
+    for line in lines:
+        # Detect entering an annotations block
+        m_ann = re.match(r'^(\s*)annotations\s*:\s*$', line)
+        if m_ann:
+            in_annotations = True
+            annotations_indent = len(m_ann.group(1))
+            out.append(line)
+            continue
+
+        if in_annotations:
+            # Determine whether we've left the annotations block
+            current_indent = len(line) - len(line.lstrip(' '))
+            if current_indent <= (annotations_indent or 0):
+                in_annotations = False
+                annotations_indent = None
+                # fall through to append unmodified
+
+            else:
+                # Inside annotations: try to quote unquoted scalar values with templates
+                # Skip comments or list items
+                if re.match(r'^\s*#', line) or re.match(r'^\s*-\s', line):
+                    out.append(line)
+                    continue
+
+                # key: value
+                m_kv = re.match(r'^(\s*)([^:\'"]+?)\s*:\s*(.*)$', line)
+                if m_kv:
+                    pre, key, value = m_kv.groups()
+                    # If empty or already quoted or block scalar, leave as-is
+                    if value == '' or value[:1] in ['"', "'"] or value[:1] in ['|', '>']:
+                        out.append(line)
+                        continue
+
+                    # If contains mustache templates, quote it
+                    if '{{' in value and '}}' in value:
+                        # Use single quotes for YAML and escape internal single quotes by doubling
+                        safe = value.replace("'", "''")
+                        out.append(f"{pre}{key}: '{safe}'")
+                        continue
+
+        out.append(line)
+
+    return '\n'.join(out)
+
+
 def fix_yaml_content(yaml_content: str) -> str:
     """
     Fix YAML content to ensure:
@@ -669,13 +725,16 @@ def fix_yaml_content(yaml_content: str) -> str:
     
     logger = get_logger(__name__)
     
+    # Pre-sanitize to avoid YAML parse errors (e.g., mapping values are not allowed here)
+    sanitized_content = _sanitize_yaml_templates(yaml_content)
+    
     try:
         # Parse the YAML content
-        data = yaml.safe_load(yaml_content)
+        data = yaml.safe_load(sanitized_content)
         
         if not data or 'groups' not in data:
             printer.out("⚠️  No valid groups found in YAML")
-            return yaml_content
+            return sanitized_content
         
         total_rules = 0
         
@@ -712,13 +771,13 @@ def fix_yaml_content(yaml_content: str) -> str:
                             seconds = 60  # Default to 1m if unknown unit
                         
                         # If greater than 1 minute (60 seconds), set to 1m
-                        if seconds < 60:
+                        if seconds > 60:
                             rule['for'] = '1m'
                             printer.out(f"🔧 Fixed 'for' duration from {for_duration} to 1m for alert: {rule.get('alert', 'unknown')}")
                 
                 # Fix multiline descriptions in annotations
-                if 'annotations' in rule:
-                    for key, value in rule['annotations'].items():
+                if 'annotations' in rule and isinstance(rule['annotations'], dict):
+                    for key, value in list(rule['annotations'].items()):
                         if isinstance(value, str) and '\n' in value:
                             # Convert multiline to single line, replacing newlines with spaces
                             single_line = re.sub(r'\s*\n\s*', ' ', value.strip())
@@ -740,7 +799,7 @@ def fix_yaml_content(yaml_content: str) -> str:
         printer.out(f"✅ YAML validation complete: {total_rules} rules processed")
         
         # Convert back to YAML string
-        fixed_yaml = yaml.dump(data, default_flow_style=False, allow_unicode=True)
+        fixed_yaml = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return fixed_yaml
         
     except yaml.YAMLError as e:
@@ -749,8 +808,9 @@ def fix_yaml_content(yaml_content: str) -> str:
             'operation': 'fix_yaml_content',
             'error': str(e)
         })
-        printer.out(f"❌ YAML parsing error: {e}")
-        return yaml_content  # Return original if parsing fails
+        printer.out(f"❌ YAML parsing error (using sanitized content as fallback): {e}")
+        # Fall back to sanitized content so the downstream converter can still try
+        return sanitized_content
         
     except Exception as e:
         logger.error(f"Error fixing YAML content: {e}", extra={
@@ -759,7 +819,7 @@ def fix_yaml_content(yaml_content: str) -> str:
             'error': str(e)
         })
         printer.out(f"❌ Error fixing YAML content: {e}")
-        return yaml_content  # Return original if any error occurs
+        return sanitized_content  # Return sanitized YAML if any error occurs
 
 def convert_to_azure_prom_rules(yaml_content: str) -> str:
     """Convert generic Prometheus rules to Azure-compatible format."""
