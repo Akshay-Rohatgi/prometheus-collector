@@ -2,52 +2,359 @@
 
 ## Agent Architecture Overview
 
-The system employs specialized AI agents, each with distinct responsibilities and prompt engineering optimizations. All agents are built on top of LangChain/LangGraph with structured output parsing.
+The system employs specialized AI agents, each with distinct responsibilities and prompt engineering optimizations. All agents are built on top of LangChain/LangGraph with structured output parsing and multi-model LLM strategies for optimal performance.
+
+## Model Configuration and Strategy
+
+### Available Models (`ai/models.py`)
+```python
+# Azure OpenAI Models with specific use cases
+llm_o3 = AzureChatOpenAI(azure_deployment="o3")           # Advanced reasoning
+llm_4o = AzureChatOpenAI(azure_deployment="gpt-4o")       # General purpose  
+llm_41 = AzureChatOpenAI(azure_deployment="gpt-4.1")      # Legacy compatibility
+llm_5 = AzureChatOpenAI(azure_deployment="gpt-5")         # Complex generation
+```
+
+### Model Selection Strategy
+- **GPT-5**: Complex monitoring plan generation with reasoning_effort="minimal"
+- **GPT-4o**: General purpose tasks, evaluations, and tool calling
+- **o3**: Advanced reasoning for complex decision making
+- **Temperature settings**: 0.3 for consistent, focused outputs
 
 ## Core Agent Types
 
 ### 1. Workload Detection Agent
-**File**: `ai/graphs.py` - `workload_detection_node()`
+**File**: `ai/graphs.py` - `detect_workloads()` and `detect_oss_workloads()`
 **Purpose**: Analyze Kubernetes services and identify OSS components suitable for monitoring
 
-#### Prompt Strategy
+#### Technical Implementation
+```python
+def detect_workloads(workflow: Workflow) -> dict[str, Workload]:
+    """Detect workloads in the Kubernetes cluster using K8sClient."""
+    client = K8sClient(K8S_CONFIG_PATH)
+    detected_workloads = client.get_services()
+    
+    # Log detected workloads for system tracking
+    logger.info("Workloads detected", extra={
+        'component': 'ai_graphs',
+        'operation': 'detect_workloads',
+        'workload_count': len(detected_workloads)
+    })
+    return {"detected_workloads": detected_workloads}
+```
+
+#### OSS Detection Prompt Strategy
 ```
 System Role: Expert Kubernetes administrator and monitoring specialist
 Task: Analyze cluster services and identify open-source software worth monitoring
 Focus Areas:
-- Databases (PostgreSQL, MySQL, Redis, MongoDB)
-- Message queues (RabbitMQ, Kafka, NATS)
-- Web servers (Nginx, Apache)
-- Application frameworks
+- Databases (PostgreSQL, MySQL, Redis, MongoDB, ClickHouse)
+- Message queues (RabbitMQ, Kafka, NATS, Pulsar)
+- Web servers (Nginx, Apache, Traefik)
+- Application frameworks (Node.js, Java applications)
+- Storage systems (Elasticsearch, MinIO)
 - Exclude: System services, operators, monitoring itself
 ```
 
 #### Input Processing
-- Raw Kubernetes service discovery data
-- Service annotations and labels
-- Container image analysis
-- Port and protocol inspection
+- Raw Kubernetes service discovery data from `k8s.client.get_services()`
+- Service annotations and labels analysis
+- Container image analysis for OSS detection
+- Port and protocol inspection for service identification
 
 #### Output Structure
 ```python
-[{
-    "service_name": "postgres-service",
-    "namespace": "production", 
-    "oss_type": "postgresql",
-    "monitoring_potential": "high",
-    "reasoning": "Database service with standard PostgreSQL metrics",
-    "recommended_approach": "ServiceMonitor + Grafana dashboard"
-}]
+{
+    "service_name": {
+        "name": "postgres-service",
+        "namespace": "production", 
+        "pretty_name": "postgresql",  # Human-readable OSS type
+        "is_oss": True,
+        "monitoring_potential": "high"
+    }
+}
 ```
 
 ### 2. Monitoring Plan Generator
-**File**: `ai/graphs.py` - `monitoring_plan_generation_node()`
-**Purpose**: Create comprehensive monitoring deployment plans
+**File**: `ai/graphs.py` - `generate_monitoring_deployment_plan()`
+**Purpose**: Create comprehensive monitoring deployment plans with Azure Managed Prometheus
 
-#### Prompt Engineering
+#### Model Configuration
+- **Primary Model**: GPT-5 with reasoning effort for complex planning
+- **Fallback Model**: GPT-4o for reliability
+- **Temperature**: 0.3 for consistent technical outputs
+
+#### Prompt Engineering Strategy
 ```
 System Role: Senior DevOps engineer specializing in Prometheus monitoring
-Context: Azure Managed Prometheus environment
+Context: Azure Managed Prometheus environment with specific apiVersion requirements
+Task: Generate deployment plans with structured sections and Azure compatibility
+```
+
+#### Tool Integration
+The generator has access to specialized tools for accurate plan creation:
+
+```python
+tools = [
+    tools.get_chart_yaml_version,      # Get latest Helm chart versions
+    tools.get_values_yaml_formatted,   # Get chart configuration options
+    tools.get_chart_readme,           # Get chart documentation
+    tools.search_values_keys          # Search for specific configuration keys
+]
+```
+
+#### Output Format
+- **Markdown structure** with standardized sections
+- **Prerequisites section** for service-specific requirements
+- **Main installation commands** with proper parameterization
+- **Verification steps** for deployment validation
+- **Azure-specific configurations** (apiVersion: azmonitoring.coreos.com/v1)
+
+#### Iterative Improvement
+The system supports multi-round generation based on critic feedback:
+```python
+if is_improvement:
+    analysis_prompt = f"""
+    IMPROVE the existing monitoring deployment plan based on critic feedback.
+    
+    PREVIOUS PLAN: {previous_plan.markdown_plan}
+    CRITIC FEEDBACK: {previous_feedback}
+    
+    Please ADDRESS the feedback and generate an IMPROVED plan.
+    """
+```
+
+### 3. Plan Evaluation Agent (Critic)
+**File**: `ai/graphs.py` - `evaluate_monitoring_deployment_plan()`
+**Purpose**: Evaluate monitoring plans for completeness, correctness, and Azure compatibility
+
+#### Enhanced Evaluation System
+```python
+def build_enhanced_evaluator_prompt(workload: Workload, exporter_name: str = None) -> str:
+    """Build enhanced system prompt with workload context and validation tools."""
+```
+
+#### Evaluation Criteria
+1. **Service URI Format Validation**
+   - Verify service URIs (servicename.namespace.svc.cluster.local)
+   - Cross-reference against values.yaml documentation
+   - Ensure namespace and service name alignment
+
+2. **Required Configuration Completeness**
+   - Verify all necessary values in deployment commands
+   - **CRITICAL**: Ensure apiVersion override to "azmonitoring.coreos.com/v1"
+   - Check required credentials, database parameters, connection strings
+   - Validate configuration parameters for specific exporters
+
+3. **Azure Compatibility**
+   - Enforce Azure-specific ServiceMonitor apiVersion
+   - Validate Helm parameter overrides
+   - Check Azure Managed Prometheus compatibility
+
+#### Tool Access for Validation
+```python
+tools = [
+    tools.get_values_yaml,           # Complete values.yaml with comments
+    tools.get_chart_readme,          # Chart documentation and examples
+    tools.get_values_yaml_formatted  # Flattened configuration keys
+]
+```
+
+#### Multi-Round Evaluation
+- **Maximum rounds**: Configurable via `MAX_EVALUATION_ROUNDS`
+- **Automatic approval**: After max rounds reached
+- **Feedback tracking**: Structured feedback with round counting
+- **Improvement iteration**: Plans regenerated based on feedback
+
+### 4. Dashboard Recommendation Agent
+**File**: `ai/graphs.py` - `reccomend_dashboards()`
+**Purpose**: Recommend Grafana dashboards from grafana.com
+
+#### Implementation Strategy
+```python
+def reccomend_dashboards(workflow: Workflow) -> dict[str, dict[str, int]]:
+    """Recommend dashboards based on workload type and monitoring setup."""
+    
+    workload_name = workflow.verified_oss_workload.name
+    exporter_name = workload_name.lower()
+    
+    # Tool integration for dashboard search
+    recommended_dashboards_storage = {}
+    add_dashboard_tool = tools.create_add_dashboard_tool(recommended_dashboards_storage)
+    
+    # Generate recommendations using LLM
+    agent_response = agent_utils.AgentManager.create_and_run_agent(
+        prompt=f"Find suitable Grafana dashboards for {exporter_name}",
+        tools=[tools.fetch_dashboard_from_source, add_dashboard_tool]
+    )
+```
+
+### 5. Alerting Rules Agent
+**File**: `ai/graphs.py` - `reccomend_alerting_rules()`
+**Purpose**: Generate Prometheus alerting rules from awesome-prometheus-alerts
+
+#### Tool Integration
+```python
+tools = [
+    tools.get_awesome_rule_index,    # Get available rule categories
+    tools.get_awesome_rule,          # Get specific rule content
+    tools.create_add_alerting_rules_tool  # Add rules to collection
+]
+```
+
+#### Rule Selection Strategy
+- Query awesome-prometheus-alerts repository
+- Match workload type to available rule categories
+- Extract and format rules for Azure Managed Prometheus
+- Provide installation instructions
+
+## Agent Orchestration (`ai/graphs.py`)
+
+### Workflow State Management
+```python
+class Workflow(BaseModel):
+    """Central state container for all workflow data."""
+    thread_id: str
+    detected_workloads: dict[str, Workload]
+    detected_oss_workloads: dict[str, Workload]
+    selected_oss_workload: Workload
+    verified_oss_workload: Workload
+    monitoring_plan: MonitoringPlan
+    monitoring_plan_feedback: MonitoringFeedback
+    recommended_dashboards: dict[str, int]
+    recommended_alerting_rules: AlertingRules
+```
+
+### LangGraph Implementation
+```python
+def build_graph() -> StateGraph:
+    """Build the complete workflow state machine."""
+    graph = StateGraph(Workflow)
+    
+    # Add nodes for each agent
+    graph.add_node("detect_workloads", detect_workloads)
+    graph.add_node("detect_oss_workloads", detect_oss_workloads)
+    graph.add_node("generate_monitoring_deployment_plan", generate_monitoring_deployment_plan)
+    graph.add_node("evaluate_monitoring_deployment_plan", evaluate_monitoring_deployment_plan)
+    graph.add_node("reccomend_dashboards", reccomend_dashboards)
+    graph.add_node("reccomend_alerting_rules", reccomend_alerting_rules)
+    
+    # Add routing logic
+    graph.add_conditional_edges("evaluate_monitoring_deployment_plan", route_after_evaluation)
+    
+    return graph
+```
+
+### Routing Logic
+```python
+def route_after_evaluation(workflow: Workflow) -> str:
+    """Determine next step based on critic feedback."""
+    feedback = workflow.monitoring_plan_feedback
+    
+    if feedback.critic_approved or feedback.round_count >= MAX_EVALUATION_ROUNDS - 1:
+        return "approve_monitoring_deployment_plan"
+    return "generate_monitoring_deployment_plan"  # Retry generation
+```
+
+## Agent Utilities (`ai/utils/`)
+
+### Agent Manager (`ai/utils/agent_utils.py`)
+```python
+class AgentManager:
+    @staticmethod
+    def create_and_run_agent(prompt: str, model: AzureChatOpenAI, tools: list, agent_prompt: str):
+        """Create and execute agent with specified configuration."""
+        
+    @staticmethod
+    def get_agent_response_content(response) -> str:
+        """Extract content from agent response."""
+        
+    @staticmethod
+    def get_agent_tool_calls(response) -> dict:
+        """Extract tool calls from agent response."""
+```
+
+### Workload Utilities (`ai/utils/workload_utils.py`)
+```python
+def format_workload_info(workload: Workload) -> str:
+    """Format workload information for agent prompts."""
+    
+    return f"""
+    Workload Information:
+    - Name: {workload.name}
+    - Namespace: {workload.namespace}
+    - Service Type: {workload.service_type}
+    - Ports: {workload.service_ports}
+    - Labels: {workload.metadata_labels}
+    - Pretty Name: {workload.pretty_name}
+    """
+```
+
+## Tool Integration (`ai/tools.py`)
+
+### GitHub Integration Tools
+```python
+def get_chart_yaml_version(exporter_name: str) -> str:
+    """Get latest version from Chart.yaml for prometheus exporter."""
+    
+def get_values_yaml(exporter_name: str) -> str:
+    """Get complete values.yaml with comments from prometheus exporter chart."""
+    
+def get_chart_readme(exporter_name: str) -> str:
+    """Get README.md content for prometheus exporter chart."""
+```
+
+### Prometheus Community Tools
+```python
+def get_values_yaml_formatted(exporter_name: str) -> dict:
+    """Get flattened key-value pairs from values.yaml."""
+    
+def search_values_keys(exporter_name: str, search_pattern: str) -> list:
+    """Search for specific configuration keys in values.yaml."""
+```
+
+### Dashboard and Alerting Tools
+```python
+def fetch_dashboard_from_source(dashboard_query: str) -> str:
+    """Fetch dashboard information from grafana.com."""
+    
+def get_awesome_rule_index() -> List[str]:
+    """Get list of available alerting rule categories."""
+    
+def get_awesome_rule(service_name: str) -> Dict[str, str]:
+    """Get alerting rules for specific service."""
+```
+
+## Configuration (`ai/config.py`)
+```python
+K8S_CONFIG_PATH = "/path/to/kubeconfig"      # Kubernetes configuration
+MAX_EVALUATION_ROUNDS = 3                    # Maximum evaluation iterations
+OSS_WORKLOAD_EMOJI = "📦"                   # Display emoji for OSS workloads
+```
+
+## Error Handling and Logging
+
+### Structured Logging
+All agents use structured logging for system events:
+```python
+logger.info("Monitoring plan generation started", extra={
+    'component': 'ai_graphs',
+    'operation': 'generate_monitoring_deployment_plan',
+    'workflow_phase': 'monitoring-plan-generation',
+    'workload_name': workload.name,
+    'is_improvement': is_improvement
+})
+```
+
+### Fallback Mechanisms
+- **Empty response handling**: Generate fallback plans when LLM fails
+- **Tool failure recovery**: Continue workflow with limited functionality
+- **Timeout handling**: Graceful degradation for long-running operations
+
+### Agent State Recovery
+- **Checkpoint persistence**: State saved at each workflow step
+- **Resumable execution**: Continue from any workflow phase
+- **Error state tracking**: Detailed error information for debugging
 Requirements:
 - Generate complete monitoring stack deployment
 - Include ServiceMonitor configurations

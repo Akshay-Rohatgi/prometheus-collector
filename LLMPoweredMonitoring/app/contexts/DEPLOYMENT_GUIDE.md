@@ -3,159 +3,109 @@
 ## Development Environment Setup
 
 ### Prerequisites
-- Python 3.12+
-- Kubernetes cluster access (local or remote)
-- Docker (for containerization)
-- Helm 3.x (for chart deployment)
+- **Python 3.12+** (specified in Dockerfile and requirements)
+- **Kubernetes cluster access** with appropriate RBAC permissions
+- **Docker** for containerization and development
+- **Helm 3.x** for chart management and deployment
+- **kubectl** configured for target cluster
+- **Azure OpenAI access** with API keys
+- **GitHub access** for chart repository integration
 
 ### Local Development Setup
 
-#### 1. Virtual Environment
+#### 1. Environment Preparation
 ```bash
-# Create and activate virtual environment
-python -m venv env
+# Clone repository
+git clone <repository-url>
+cd prometheus-collector/LLMPoweredMonitoring/app
+
+# Create virtual environment using Python 3.12
+python3.12 -m venv env
 source env/bin/activate  # Linux/Mac
-# or
-env\Scripts\activate  # Windows
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-#### 2. Environment Variables
-Create `.env` file in project root:
+#### 2. Environment Configuration
+The system requires multiple environment variables. Create appropriate `.env` files:
+
+**AI Configuration**:
 ```bash
-# AI Configuration
-OPENAI_API_KEY=your-openai-api-key
-AI_MODEL=gpt-4
-AI_TEMPERATURE=0.1
+# Azure OpenAI Configuration
+OPENAI_KEY=your-azure-openai-key
 
-# Kubernetes Configuration
-KUBECONFIG=/path/to/your/kubeconfig
-K8S_CONTEXT=your-cluster-context
+# Model Configuration
+AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_OPENAI_API_VERSION=2024-12-01-preview
+```
 
-# Application Configuration
+**GitHub Integration**:
+```bash
+# GitHub API Access for Helm Charts
+GITHUB_TOKEN=your-github-token
+```
+
+**Application Configuration** (root `.env`):
+```bash
+# Application Settings
 DEBUG=true
-LOG_LEVEL=DEBUG
+LOG_LEVEL=INFO
 HOST=0.0.0.0
 PORT=8000
 
-# Optional: Azure Integration
-AZURE_CLIENT_ID=your-client-id
-AZURE_TENANT_ID=your-tenant-id
-AZURE_SUBSCRIPTION_ID=your-subscription-id
+# Kubernetes Configuration
+K8S_CONFIG_PATH=/path/to/kubeconfig
+K8S_CONTEXT=your-cluster-context
+
+# Workflow Configuration
+MAX_EVALUATION_ROUNDS=3
+OSS_WORKLOAD_EMOJI=📦
 ```
 
-#### 3. Start Development Server
+#### 3. Kubernetes Configuration
+Ensure your kubeconfig provides appropriate permissions:
+```yaml
+# Required RBAC permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoring-automation
+rules:
+- apiGroups: [""]
+  resources: ["services", "pods", "namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["monitoring.coreos.com", "azmonitoring.coreos.com"]
+  resources: ["servicemonitors", "prometheusrules"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+```
+
+#### 4. Start Development Server
 ```bash
-# Run with auto-reload
+# Method 1: Direct Python execution
 python main.py
 
-# Or using uvicorn directly
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Method 2: FastAPI development mode
+uvicorn api.routes:app --host 0.0.0.0 --port 8000 --reload
+
+# Method 3: Using the interactor for testing
+python interactor.py
 ```
 
-### Development Tools
-
-#### Code Quality
+#### 5. Development Tools and Testing
 ```bash
-# Install development dependencies
-pip install black isort flake8 mypy pytest pytest-asyncio
+# Run specific tests
+python tests/ai/test_oss_detection.py
+python tests/ai/test_plan_generation.py
 
-# Format code
-black .
-isort .
+# Run plan generation evaluation
+python scripts/run_plan_generation_eval.py
 
-# Lint code
-flake8 .
-mypy .
-
-# Run tests
-pytest tests/ -v
-```
-
-#### Pre-commit Hooks
-```bash
-# Install pre-commit
-pip install pre-commit
-
-# Setup hooks
-pre-commit install
-
-# Run on all files
-pre-commit run --all-files
-```
-
-## Testing Strategy
-
-### Unit Tests
-**Location**: `tests/unit/`
-
-```python
-# Example test structure
-tests/
-├── unit/
-│   ├── test_workflow.py
-│   ├── test_k8s_client.py
-│   ├── test_ai_agents.py
-│   └── test_instructions.py
-├── integration/
-│   ├── test_api_endpoints.py
-│   └── test_k8s_integration.py
-└── fixtures/
-    ├── mock_k8s_data.yaml
-    └── sample_plans.md
-```
-
-#### Running Tests
-```bash
-# Unit tests only
-pytest tests/unit/ -v
-
-# Integration tests (requires cluster access)
-pytest tests/integration/ -v
-
-# All tests with coverage
-pytest --cov=. --cov-report=html
-```
-
-### Mock Kubernetes Data
-```python
-# tests/fixtures/mock_k8s_data.py
-MOCK_SERVICES = [
-    {
-        "metadata": {
-            "name": "postgres-service",
-            "namespace": "production",
-            "labels": {"app": "postgres"}
-        },
-        "spec": {
-            "ports": [{"name": "postgres", "port": 5432}],
-            "selector": {"app": "postgres"}
-        }
-    }
-]
-```
-
-### AI Agent Testing
-```python
-# Mock LLM responses for testing
-@pytest.fixture
-def mock_llm_response():
-    return {
-        "detected_workloads": [
-            {
-                "name": "postgres-service",
-                "type": "postgresql",
-                "monitoring_potential": "high"
-            }
-        ]
-    }
-
-@patch('ai.models.get_llm_client')
-def test_workload_detection(mock_llm, mock_llm_response):
-    # Test agent logic with predictable responses
-    pass
+# Test specific functionality
+python -c "from k8s.client import K8sClient; client = K8sClient(); print(client.get_services())"
 ```
 
 ## Container Build and Deployment
@@ -164,252 +114,273 @@ def test_workload_detection(mock_llm, mock_llm_response):
 **File**: `Dockerfile`
 
 ```dockerfile
-FROM python:3.12-slim
+FROM python:3.12-bookworm
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies and tools
+RUN apt-get update && apt-get install -y gcc apt-transport-https ca-certificates curl gnupg git nodejs npm && rm -rf /var/lib/apt/lists/*
 
-# Install kubectl and helm
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
-    && chmod +x kubectl && mv kubectl /usr/local/bin/
+# Install kubectl (latest stable)
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && mv kubectl /usr/local/bin/
 
-RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+# Install helm
+RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
-# Copy requirements and install Python dependencies
+# Add prometheus-community repository
+RUN helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+# Clone awesome-prometheus-alerts for alerting rules
+RUN git clone https://github.com/samber/awesome-prometheus-alerts.git /opt/awesome-prometheus-alerts
+
+# Install Azure Prometheus rules converter
+RUN npm i -g https://gitpkg.now.sh/Azure/prometheus-collector/tools/az-prom-rules-converter?main
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
-
+# Expose port
 EXPOSE 8000
 
+# Set command
 CMD ["python", "main.py"]
 ```
 
-### Build and Push
+### Building the Container
 ```bash
-# Build image
-docker build -t your-registry/monitoring-automation:latest .
+# Local build
+docker build -t llm-powered-monitoring:latest .
 
-# Test locally
-docker run -p 8000:8000 \
-    -v ~/.kube:/home/appuser/.kube:ro \
-    -e OPENAI_API_KEY=your-key \
-    your-registry/monitoring-automation:latest
+# Build with specific tag
+docker build -t llm-powered-monitoring:v1.0.0 .
 
-# Push to registry
-docker push your-registry/monitoring-automation:latest
+# Multi-platform build (for Azure Container Registry)
+docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/llm-powered-monitoring:latest .
 ```
+
+### Container Registry Integration
+```bash
+# Azure Container Registry
+az acr login --name your-registry
+docker tag llm-powered-monitoring:latest your-registry.azurecr.io/llm-powered-monitoring:latest
+docker push your-registry.azurecr.io/llm-powered-monitoring:latest
+
+# Microsoft Container Registry (current deployment)
+# Image: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:llm-powered-monitoring-6
+```
+
+## Configuration Files
+
+### Application Configuration
 
 ## Kubernetes Deployment
 
-### Namespace Setup
-**File**: `manifests/namespace.yaml`
+### Production Deployment
+Follow these steps to deploy to a Kubernetes cluster:
 
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: monitoring-automation
-  labels:
-    app: monitoring-automation
-    monitoring: enabled
-```
-
-### ServiceAccount and RBAC
-**File**: `manifests/serviceaccount.yaml`
-
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: monitoring-automation
-  namespace: monitoring-automation
-  annotations:
-    # For Azure Workload Identity
-    azure.workload.identity/client-id: your-client-id
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: monitoring-automation
-rules:
-# Service discovery
-- apiGroups: [""]
-  resources: ["services", "endpoints", "pods", "nodes", "namespaces"]
-  verbs: ["get", "list", "watch"]
-
-# Monitoring resources
-- apiGroups: ["monitoring.coreos.com"]
-  resources: ["servicemonitors", "prometheusrules", "podmonitors"]
-  verbs: ["get", "list", "create", "update", "patch", "delete"]
-
-# Application deployment
-- apiGroups: ["apps"]
-  resources: ["deployments", "daemonsets", "statefulsets"]
-  verbs: ["get", "list", "create", "update", "patch"]
-
-# ConfigMaps and Secrets
-- apiGroups: [""]
-  resources: ["configmaps", "secrets"]
-  verbs: ["get", "list", "create", "update"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: monitoring-automation
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: monitoring-automation
-subjects:
-- kind: ServiceAccount
-  name: monitoring-automation
-  namespace: monitoring-automation
-```
-
-### Application Deployment
-**File**: `manifests/deployment.yaml`
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: monitoring-automation
-  namespace: monitoring-automation
-  labels:
-    app: monitoring-automation
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: monitoring-automation
-  template:
-    metadata:
-      labels:
-        app: monitoring-automation
-        azure.workload.identity/use: "true"  # For Azure Workload Identity
-    spec:
-      serviceAccountName: monitoring-automation
-      containers:
-      - name: monitoring-automation
-        image: your-registry/monitoring-automation:latest
-        ports:
-        - containerPort: 8000
-          name: http
-        env:
-        - name: HOST
-          value: "0.0.0.0"
-        - name: PORT
-          value: "8000"
-        - name: LOG_LEVEL
-          value: "INFO"
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: ai-credentials
-              key: openai-api-key
-        # Azure environment variables (if using Azure integration)
-        - name: AZURE_CLIENT_ID
-          value: "your-client-id"
-        - name: AZURE_TENANT_ID
-          value: "your-tenant-id"
-        resources:
-          requests:
-            cpu: 200m
-            memory: 512Mi
-          limits:
-            cpu: 1000m
-            memory: 1Gi
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: http
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: http
-          initialDelaySeconds: 5
-          periodSeconds: 10
-      # Image pull secrets if using private registry
-      imagePullSecrets:
-      - name: registry-credentials
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: monitoring-automation
-  namespace: monitoring-automation
-spec:
-  selector:
-    app: monitoring-automation
-  ports:
-  - name: http
-    port: 80
-    targetPort: 8000
-  type: ClusterIP
-```
-
-### Secrets Management
+#### 1. Create Namespace
 ```bash
-# Create AI credentials secret
-kubectl create secret generic ai-credentials \
-  --from-literal=openai-api-key=your-openai-api-key \
-  -n monitoring-automation
+kubectl apply -f manifests/prod/namespace.yaml
+```
 
-# Create registry credentials (if using private registry)
-kubectl create secret docker-registry registry-credentials \
-  --docker-server=your-registry.com \
-  --docker-username=your-username \
-  --docker-password=your-password \
-  -n monitoring-automation
+#### 2. Create Secrets
+```bash
+kubectl create secret generic openai-secrets \
+  --from-literal=OPENAI_KEY='<your-openai-key>' \
+  -n llm-powered-monitoring
+
+kubectl create secret generic github-secrets \
+  --from-literal=GITHUB_TOKEN='<your-github-token>' \
+  -n llm-powered-monitoring
+```
+
+#### 3. Deploy RBAC and Application
+```bash
+kubectl apply -f manifests/prod/serviceaccount.yaml
+kubectl apply -f manifests/prod/deployment.yaml
+```
+
+#### 4. Verify Deployment
+```bash
+kubectl get pods -n llm-powered-monitoring
+kubectl logs -f deployment/llm-powered-monitoring -n llm-powered-monitoring
+```
+    print_header "Exec into Ubuntu Container"
+    kubectl exec -it deployment/$DEPLOYMENT_NAME -n $NAMESPACE -- /bin/bash
+}
+```
+
+## Configuration Management
+
+### Application Configuration
+**File**: `ai/config.py`
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+# Kubernetes Configuration
+K8S_CONFIG_PATH = os.getenv("K8S_CONFIG_PATH", "/home/user/.kube/config")
+
+# Workflow Configuration  
+MAX_EVALUATION_ROUNDS = int(os.getenv("MAX_EVALUATION_ROUNDS", "3"))
+OSS_WORKLOAD_EMOJI = os.getenv("OSS_WORKLOAD_EMOJI", "📦")
+
+# External Dependencies
+AWESOME_ALERTS_BASE_PATH = "/opt/awesome-prometheus-alerts/dist/rules"
+```
+
+### Logging Configuration
+**File**: `logs/config.py`
+The system supports dual-mode logging:
+- **Debug mode**: Rich console output for development
+- **Production mode**: Structured JSON logging
+
+```python
+def setup_logging():
+    """Configure logging based on environment."""
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    debug_mode = os.getenv("DEBUG", "false").lower() == "true"
+    
+    if debug_mode:
+        setup_rich_logging(log_level)
+    else:
+        setup_json_logging(log_level)
+```
+
+### Model Configuration
+**File**: `ai/models.py`
+```python
+# Azure OpenAI Models - Deploy these with the specified names
+llm_4o = AzureChatOpenAI(
+    azure_deployment="gpt-4o",
+    api_version="2024-12-01-preview",
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("OPENAI_KEY")
+)
+
+llm_5 = AzureChatOpenAI(
+    azure_deployment="gpt-5", 
+    api_version="2024-12-01-preview",
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("OPENAI_KEY"),
+    reasoning_effort="minimal"
+)
+
+llm_o3 = AzureChatOpenAI(
+    azure_deployment="o3",
+    api_version="2024-12-01-preview",
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("OPENAI_KEY")
+)
 ```
 
 ## Production Deployment Considerations
 
 ### High Availability
 ```yaml
-# Add pod disruption budget
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: monitoring-automation-pdb
-  namespace: monitoring-automation
+# Multiple replicas with anti-affinity
 spec:
-  minAvailable: 1
-  selector:
-    matchLabels:
-      app: monitoring-automation
+  replicas: 3
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - llm-powered-monitoring
+              topologyKey: kubernetes.io/hostname
 ```
 
-### Monitoring the Monitor
+### Resource Management
 ```yaml
-# ServiceMonitor for self-monitoring
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+```
+
+### Health Checks and Monitoring
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
+```
+
+### Security Considerations
+
+#### 1. Network Policies
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
-  name: monitoring-automation
-  namespace: monitoring-automation
+  name: llm-powered-monitoring-netpol
+  namespace: llm-powered-monitoring
 spec:
-  selector:
+  podSelector:
     matchLabels:
-      app: monitoring-automation
-  endpoints:
-  - port: http
-    path: /metrics
-    interval: 30s
+      app: llm-powered-monitoring
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to: []  # Allow all egress (required for Azure OpenAI, GitHub, K8s API)
+```
+
+#### 2. Pod Security Standards
+```yaml
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: llm-powered-monitoring
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
 ```
 
 ### Ingress Configuration
@@ -417,8 +388,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: monitoring-automation
-  namespace: monitoring-automation
+  name: llm-powered-monitoring
+  namespace: llm-powered-monitoring
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     cert-manager.io/cluster-issuer: letsencrypt-prod
@@ -435,184 +406,63 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: monitoring-automation
+            name: llm-powered-monitoring
             port:
               number: 80
 ```
 
-## CI/CD Pipeline
+## Troubleshooting and Debugging
 
-### GitHub Actions Example
-**File**: `.github/workflows/deploy.yml`
+### Common Issues
 
-```yaml
-name: Build and Deploy
+#### 1. Kubernetes Connection Issues
+```bash
+# Check kubeconfig
+kubectl config current-context
+kubectl cluster-info
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-    
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-        pip install pytest pytest-asyncio
-    
-    - name: Run tests
-      run: pytest tests/unit/ -v
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Configure kubectl
-      uses: azure/k8s-set-context@v3
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBECONFIG }}
-    
-    - name: Deploy to Kubernetes
-      run: |
-        # Update image in deployment
-        kubectl set image deployment/monitoring-automation \
-          monitoring-automation=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-          -n monitoring-automation
-        
-        # Wait for rollout
-        kubectl rollout status deployment/monitoring-automation -n monitoring-automation
+# Test service account permissions
+kubectl auth can-i list services --as=system:serviceaccount:llm-powered-monitoring:llm-powered-monitoring-sa
 ```
 
-## Configuration Management
-
-### Environment-Specific Configs
+#### 2. Azure OpenAI API Issues
 ```python
-# config/environments.py
+# Test API connectivity
 import os
+from ai.models import llm_5
 
-class BaseConfig:
-    DEBUG = False
-    LOG_LEVEL = "INFO"
-    AI_MODEL = "gpt-4"
-    AI_TEMPERATURE = 0.1
-
-class DevelopmentConfig(BaseConfig):
-    DEBUG = True
-    LOG_LEVEL = "DEBUG"
-    AI_MODEL = "gpt-4o-mini"  # Cheaper for development
-
-class ProductionConfig(BaseConfig):
-    DEBUG = False
-    LOG_LEVEL = "WARNING"
-    AI_MODEL = "gpt-4"
-
-def get_config():
-    env = os.getenv('ENVIRONMENT', 'development')
-    if env == 'production':
-        return ProductionConfig()
-    return DevelopmentConfig()
+response = llm_5.invoke("Test message")
+print(response.content)
 ```
 
-### Health Checks
-```python
-# Add to main.py
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
-
-@app.get("/ready")
-async def readiness_check():
-    # Check dependencies
-    try:
-        # Test K8s connectivity
-        k8s_client = get_k8s_client()
-        await k8s_client.list_namespaces()
-        
-        # Test AI client
-        ai_client = get_ai_client()
-        # Minimal test call
-        
-        return {"status": "ready"}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Not ready: {e}")
-```
-
-## Operational Procedures
-
-### Backup and Recovery
+#### 3. Container Issues
 ```bash
-# Backup workflow state (if using persistent storage)
-kubectl exec -n monitoring-automation deployment/monitoring-automation -- \
-  /backup-script.sh
+# Check pod status
+kubectl get pods -n llm-powered-monitoring
 
-# Recovery from backup
-kubectl apply -f backup-restore-job.yaml
+# Check logs
+kubectl logs deployment/llm-powered-monitoring -n llm-powered-monitoring --follow
+
+# Exec into container for debugging
+kubectl exec -it deployment/llm-powered-monitoring -n llm-powered-monitoring -- /bin/bash
 ```
 
-### Scaling
-```bash
-# Scale up for high load
-kubectl scale deployment monitoring-automation --replicas=5 -n monitoring-automation
-
-# Configure horizontal pod autoscaler
-kubectl autoscale deployment monitoring-automation \
-  --cpu-percent=70 --min=2 --max=10 -n monitoring-automation
+### Monitoring and Observability
+```yaml
+# ServiceMonitor for the monitoring system itself
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llm-powered-monitoring
+  namespace: llm-powered-monitoring
+spec:
+  selector:
+    matchLabels:
+      app: llm-powered-monitoring
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
 ```
 
-### Troubleshooting
-```bash
-# Check application logs
-kubectl logs -n monitoring-automation deployment/monitoring-automation -f
-
-# Debug specific workflow
-kubectl exec -it deployment/monitoring-automation -n monitoring-automation -- \
-  python -c "from core.workflow import debug_workflow; debug_workflow('session-id')"
-
-# Check resource usage
-kubectl top pods -n monitoring-automation
-```
+This comprehensive deployment guide covers development setup, containerization, Kubernetes deployment, configuration management, and production considerations for the LLM-Powered Monitoring System.

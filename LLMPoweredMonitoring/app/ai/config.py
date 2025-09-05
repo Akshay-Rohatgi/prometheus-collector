@@ -3,10 +3,10 @@
 from pathlib import Path
 
 # Kubernetes configuration
-K8S_CONFIG_PATH = "/home/t-arohatgi/.kube/config"
+K8S_CONFIG_PATH = ""
 
 # Workflow configuration
-MAX_EVALUATION_ROUNDS = 3
+MAX_EVALUATION_ROUNDS = 2
 DEFAULT_EMOJI = "🔨"
 OSS_WORKLOAD_EMOJI = "🔍"
 

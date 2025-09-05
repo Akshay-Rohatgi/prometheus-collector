@@ -2,470 +2,417 @@
 
 ## Overview
 
-The system exposes a RESTful API built with FastAPI for workflow management and monitoring automation. This document provides comprehensive API documentation and integration examples.
+The system exposes a RESTful API built with FastAPI for workflow management and monitoring automation. This document provides comprehensive API documentation with real endpoint implementations, error handling, and integration examples.
 
 ## Base Configuration
 
 ### Server Setup
 ```python
-# FastAPI application configuration
+# FastAPI application configuration (api/routes.py)
 app = FastAPI(
-    title="LLM-Powered Monitoring System",
+    title="LLM-Powered Monitoring System", 
     description="Automated Kubernetes monitoring deployment with AI agents",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    version="1.0.0"
 )
 
-# CORS configuration for web UI integration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Async-safe workflow management
+_workflows: Dict[str, WorkflowStatus] = {}
+_workflow_graphs: Dict[str, any] = {}
 ```
 
 ### Base URL Structure
 ```
-Production:  https://monitoring-automation.your-domain.com/api/v1
-Development: http://localhost:8000/api/v1
-Local:       http://127.0.0.1:8000/api/v1
+Production:  https://monitoring-automation.your-domain.com
+Development: http://localhost:8000
+Local:       http://127.0.0.1:8000
+```
+
+### Request/Response Logging
+All requests are logged with structured information:
+```python
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info("HTTP request received", extra={
+        'component': 'api',
+        'operation': 'request_start', 
+        'method': request.method,
+        'path': str(request.url.path),
+        'client_ip': request.client.host
+    })
 ```
 
 ## Core API Endpoints
 
-### 1. Workflow Management
-
-#### Create New Workflow Session
+### 1. Root Endpoint
 ```http
-POST /api/v1/workflow
-Content-Type: application/json
-
-{
-    "cluster_config": {
-        "kubeconfig_path": "/path/to/kubeconfig",
-        "context": "production-cluster"
-    },
-    "options": {
-        "auto_approve": false,
-        "dry_run": false,
-        "namespace_filter": "production,staging"
-    }
-}
+GET /
 ```
 
 **Response**:
 ```json
 {
-    "session_id": "550e8400-e29b-41d4-a716-446655440000",
-    "status": "created",
-    "phase": "workload-detection",
-    "timestamp": "2025-01-15T10:30:00Z",
-    "next_action": "Start workload detection process"
+    "message": "Welcome to the LLM Powered Workload Monitoring API"
+}
+```
+
+### 2. Workflow Management
+
+#### Start New Workflow
+```http
+GET /start
+```
+
+**Purpose**: Initialize new monitoring workflow and begin workload detection
+
+**Implementation**: 
+- Creates new workflow thread with UUID
+- Starts workload detection using K8sClient
+- Runs OSS detection agent to identify monitoring candidates
+
+**Response**:
+```json
+{
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "detected_oss_workloads": {
+        "postgres-service": {
+            "name": "postgres-service",
+            "namespace": "production",
+            "pretty_name": "postgresql",
+            "service_type": "ClusterIP",
+            "is_oss": true
+        },
+        "redis-service": {
+            "name": "redis-service", 
+            "namespace": "cache",
+            "pretty_name": "redis",
+            "service_type": "ClusterIP",
+            "is_oss": true
+        }
+    }
+}
+```
+
+**Error Responses**:
+```json
+// Kubernetes connection failure
+{
+    "detail": "Failed to connect to Kubernetes cluster",
+    "error_code": "K8S_CONNECTION_ERROR"
+}
+
+// No workloads detected
+{
+    "detail": "No OSS workloads detected in cluster",
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "detected_oss_workloads": {}
 }
 ```
 
 #### Get Workflow Status
 ```http
-GET /api/v1/workflow/{session_id}
+GET /status/{thread_id}
 ```
 
-**Response**:
+**Path Parameters**:
+- `thread_id` (string): Workflow thread identifier
+
+**Response Model**: `WorkflowStatus`
 ```json
 {
-    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+    "active": true,
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
     "phase": "workload-selection",
-    "status": "waiting_for_input",
-    "progress": {
-        "completed_phases": ["workload-detection"],
-        "current_phase": "workload-selection", 
-        "total_phases": 6,
-        "percentage": 17
-    },
-    "data": {
-        "detected_workloads": [
-            {
-                "name": "postgres-service",
-                "namespace": "production",
-                "type": "postgresql",
-                "monitoring_potential": "high"
-            }
-        ]
-    },
-    "timestamp": "2025-01-15T10:35:22Z"
-}
-```
-
-#### Advance Workflow Phase
-```http
-POST /api/v1/workflow/{session_id}/advance
-Content-Type: application/json
-
-{
-    "input_data": {
-        "selected_workloads": [
-            {
-                "name": "postgres-service",
-                "namespace": "production",
-                "confirmed": true
-            }
-        ]
-    }
-}
-```
-
-**Response**:
-```json
-{
-    "session_id": "550e8400-e29b-41d4-a716-446655440000",
-    "previous_phase": "workload-selection",
-    "current_phase": "monitoring-plan-generation",
-    "status": "processing",
-    "estimated_completion": "2025-01-15T10:42:00Z"
-}
-```
-
-### 2. Workload Discovery
-
-#### List Detected Workloads
-```http
-GET /api/v1/workflow/{session_id}/workloads
-```
-
-**Response**:
-```json
-{
-    "total_services": 45,
-    "filtered_services": 8,
-    "detected_workloads": [
-        {
-            "service_name": "postgres-primary",
-            "namespace": "production",
-            "oss_type": "postgresql", 
-            "monitoring_potential": "high",
-            "current_monitoring": "none",
-            "recommended_approach": "ServiceMonitor + exporter sidecar",
-            "estimated_metrics_volume": "~500 series",
-            "ports": [
-                {"name": "postgres", "port": 5432},
-                {"name": "metrics", "port": 9187}
-            ],
-            "labels": {
-                "app.kubernetes.io/name": "postgresql",
-                "app.kubernetes.io/version": "13.8"
-            }
-        }
-    ],
-    "filtering_stats": {
-        "total_discovered": 45,
-        "system_services_filtered": 25,
-        "non_oss_filtered": 12,
-        "monitoring_candidates": 8
-    }
-}
-```
-
-#### Get Workload Details
-```http
-GET /api/v1/workload/{namespace}/{service_name}
-```
-
-**Response**:
-```json
-{
-    "service_name": "postgres-primary",
-    "namespace": "production",
-    "detailed_analysis": {
-        "oss_classification": {
-            "type": "postgresql",
-            "confidence": 0.95,
-            "detection_method": ["image_analysis", "port_pattern", "labels"]
-        },
-        "monitoring_assessment": {
-            "current_state": "no_monitoring",
-            "monitoring_potential": "high",
-            "available_exporters": ["postgres_exporter", "pg_stat_statements"],
-            "metric_endpoints": ["/metrics"]
-        },
-        "resource_analysis": {
-            "replicas": 2,
-            "resource_requests": {"cpu": "500m", "memory": "1Gi"},
-            "storage": "100Gi",
-            "high_availability": true
-        },
-        "related_resources": {
-            "deployments": ["postgres-primary"],
-            "statefulsets": [],
-            "configmaps": ["postgres-config", "postgres-init"],
-            "secrets": ["postgres-credentials"]
+    "config": {
+        "configurable": {
+            "thread_id": "550e8400-e29b-41d4-a716-446655440000"
         }
     }
 }
 ```
 
-### 3. Monitoring Plans
-
-#### Get Generated Plan
-```http
-GET /api/v1/workflow/{session_id}/plan
+**Error Responses**:
+```json
+// Workflow not found
+{
+    "detail": "Workflow not found",
+    "status_code": 404
+}
 ```
+
+### 3. Workload Selection
+
+#### Select OSS Workloads
+```http
+POST /select_oss_workloads/{thread_id}
+```
+
+**Request Model**: `SelectOSSWorkloadsRequest`
+```json
+{
+    "workload_keys": ["postgres-service", "redis-service"]
+}
+```
+
+**Implementation**:
+- Validates selected workloads exist in detected set
+- Updates workflow state with selected workload
+- Advances to monitoring plan generation phase
 
 **Response**:
 ```json
 {
-    "plan_id": "plan_550e8400_v1", 
-    "generation_timestamp": "2025-01-15T10:38:15Z",
-    "plan_format": "markdown",
-    "plan_content": "# Monitoring Plan for PostgreSQL Service\n\n## Overview\nThis plan establishes comprehensive monitoring...",
-    "structured_preview": {
-        "components": ["ServiceMonitor", "PrometheusRule", "Grafana Dashboard"],
-        "estimated_resources": {
-            "cpu": "200m",
-            "memory": "512Mi",
-            "storage": "10Gi"
-        },
-        "monitoring_coverage": {
-            "availability": true,
-            "performance": true,
-            "errors": true,
-            "capacity": true
+    "message": "OSS workloads selected successfully",
+    "selected_workloads": {
+        "postgres-service": {
+            "name": "postgres-service",
+            "namespace": "production", 
+            "pretty_name": "postgresql"
         }
-    },
-    "evaluation_status": "pending"
+    }
 }
 ```
 
-#### Request Plan Evaluation
-```http
-POST /api/v1/workflow/{session_id}/evaluate-plan
+**Error Responses**:
+```json
+// Invalid workload selection
+{
+    "detail": "Selected workload not found in detected OSS workloads",
+    "available_workloads": ["postgres-service", "redis-service"]
+}
+
+// Workflow not active
+{
+    "detail": "No active workflow found for this thread_id"
+}
 ```
+
+### 4. Monitoring Plan Generation
+
+#### Generate Monitoring Plan
+```http
+POST /generate_monitoring_plan/{thread_id}
+```
+
+**Request Model**: `generateMonitoringPlanRequest`
+```json
+{
+    "generate": true
+}
+```
+
+**Implementation**:
+- Uses LangGraph workflow resumption with `Command(resume=True)`
+- Executes `generate_monitoring_deployment_plan` agent
+- Generates markdown plan using GPT-5 model with tool integration
 
 **Response**:
 ```json
 {
-    "evaluation_id": "eval_550e8400_v1",
-    "status": "evaluating",
-    "estimated_completion": "2025-01-15T10:45:00Z",
-    "evaluation_criteria": [
-        "technical_accuracy",
-        "completeness", 
-        "best_practices",
-        "azure_compatibility"
-    ]
+    "message": "Monitoring deployment plan generated successfully",
+    "monitoring_plan": {
+        "markdown_plan": "# Monitoring Plan for PostgreSQL Service\n\n## Prerequisites\n...",
+        "generation_timestamp": "2025-01-15T10:45:00Z"
+    }
 }
 ```
 
-#### Get Plan Evaluation Results
-```http
-GET /api/v1/workflow/{session_id}/evaluation
+**Error Responses**:
+```json
+// Plan generation failure
+{
+    "detail": "Failed to generate monitoring plan",
+    "error": "Agent response was empty or invalid"
+}
+
+// Workflow state error
+{
+    "detail": "Workflow not in correct phase for plan generation",
+    "current_phase": "workload-selection",
+    "required_phase": "monitoring-plan-generation"
+}
 ```
+
+### 5. Plan Evaluation
+
+#### Evaluate Monitoring Plan
+```http
+POST /evaluate_monitoring_plan/{thread_id}
+```
+
+**Request Model**: `evaluateMonitoringPlanRequest`
+```json
+{
+    "evaluate": true
+}
+```
+
+**Implementation**:
+- Runs critic agent with enhanced validation prompts
+- Uses specialized tools for chart validation
+- Supports multi-round evaluation with feedback
 
 **Response**:
 ```json
 {
-    "evaluation_id": "eval_550e8400_v1",
-    "overall_score": 8.5,
-    "detailed_scores": {
-        "technical_accuracy": 9.0,
-        "completeness": 8.0,
-        "best_practices": 8.5,
-        "azure_compatibility": 9.0
-    },
-    "feedback": {
-        "strengths": [
-            "Comprehensive metric coverage for PostgreSQL",
-            "Proper ServiceMonitor configuration",
-            "Well-structured alerting rules"
-        ],
-        "improvements": [
-            "Add capacity planning alerts for storage",
-            "Include connection pool monitoring",
-            "Consider query performance metrics"
-        ],
-        "critical_issues": []
-    },
-    "revised_plan": "# Improved Monitoring Plan...",
-    "recommendation": "approve_with_minor_changes"
+    "message": "Monitoring plan evaluation completed", 
+    "evaluation_feedback": {
+        "critic_approved": true,
+        "feedback_text": "Plan is comprehensive and follows Azure best practices",
+        "round_count": 2
+    }
 }
 ```
 
-### 4. Deployment Management
+**Error Responses**:
+```json
+// Evaluation failure
+{
+    "detail": "Plan evaluation failed",
+    "error": "No monitoring plan found to evaluate"
+}
+
+// Max rounds reached
+{
+    "message": "Maximum evaluation rounds reached, plan auto-approved",
+    "evaluation_feedback": {
+        "critic_approved": true,
+        "round_count": 3
+    }
+}
+```
+
+### 6. Plan Structure and Deployment
 
 #### Get Structured Instructions
 ```http
-GET /api/v1/workflow/{session_id}/instructions
+POST /structure_monitoring_plan/{thread_id}
 ```
+
+**Request Model**: `structureMonitoringPlanRequest`
+```json
+{
+    "structure": true
+}
+```
+
+**Implementation**:
+- Converts markdown plan to structured instructions
+- Creates typed instruction objects (Helm, Kubectl, CreateFile, Other)
+- Validates instruction format and parameters
 
 **Response**:
 ```json
 {
-    "instruction_set_id": "inst_550e8400_v1",
-    "total_instructions": 5,
-    "estimated_duration": "3-5 minutes",
-    "prerequisites": [
-        {
-            "type": "permission",
-            "resource": "monitoring.coreos.com/servicemonitors",
-            "action": "create"
-        },
-        {
-            "type": "helm_repository",
-            "repository": "prometheus-community",
-            "url": "https://prometheus-community.github.io/helm-charts"
-        }
-    ],
-    "instructions": [
-        {
-            "order": 1,
-            "type": "helm",
-            "action": "repo_add",
-            "repository": "prometheus-community",
-            "url": "https://prometheus-community.github.io/helm-charts"
-        },
-        {
-            "order": 2,
-            "type": "helm",
-            "action": "install",
-            "release_name": "postgres-monitoring",
-            "chart": "prometheus-community/prometheus-postgres-exporter",
-            "namespace": "production",
-            "values": {
-                "serviceMonitor": {"enabled": true},
-                "datasource": {
-                    "host": "postgres-primary",
-                    "user": "monitoring",
-                    "passwordSecret": {
-                        "name": "postgres-monitoring-secret",
-                        "key": "password"
-                    }
-                }
+    "message": "Monitoring plan structured successfully",
+    "structured_plan": {
+        "instructions": [
+            {
+                "type": "helm",
+                "command": "helm repo add prometheus-community https://prometheus-community.github.io/helm-charts"
+            },
+            {
+                "type": "helm", 
+                "command": "helm install postgres-exporter prometheus-community/prometheus-postgres-exporter --set serviceMonitor.enabled=true"
+            },
+            {
+                "type": "kubectl",
+                "command": "kubectl apply -f servicemonitor.yaml"
             }
-        }
-    ]
-}
-```
-
-#### Execute Deployment
-```http
-POST /api/v1/workflow/{session_id}/deploy
-Content-Type: application/json
-
-{
-    "confirmation": true,
-    "options": {
-        "dry_run": false,
-        "timeout": 600,
-        "wait_for_ready": true
+        ]
     }
 }
 ```
 
-**Response**:
+#### Deploy Monitoring Plan
+```http
+POST /deploy_monitoring_plan/{thread_id}
+```
+
+**Request Model**: `deployMonitoringPlanRequest`
 ```json
 {
-    "deployment_id": "deploy_550e8400_v1",
-    "status": "executing",
-    "progress": {
-        "completed_instructions": 1,
-        "total_instructions": 5,
-        "current_instruction": "Installing postgres-exporter Helm chart",
-        "percentage": 20
-    },
-    "estimated_completion": "2025-01-15T10:55:00Z"
+    "deploy": true
 }
 ```
 
-#### Get Deployment Status
-```http
-GET /api/v1/deployment/{deployment_id}/status
-```
+**Implementation**:
+- Uses InstructionController for safe command execution
+- Executes helm and kubectl commands in sequence
+- Provides rollback capabilities on failure
 
 **Response**:
 ```json
 {
-    "deployment_id": "deploy_550e8400_v1",
-    "status": "completed",
-    "completion_time": "2025-01-15T10:52:30Z",
-    "results": [
-        {
-            "instruction_order": 1,
-            "type": "helm",
-            "action": "repo_add",
-            "status": "success",
-            "duration": "2.3s",
-            "output": "\"prometheus-community\" has been added to your repositories"
-        },
-        {
-            "instruction_order": 2,
-            "type": "helm", 
-            "action": "install",
-            "status": "success",
-            "duration": "45.2s",
-            "output": "Release \"postgres-monitoring\" deployed successfully"
-        }
-    ],
-    "deployed_resources": [
-        {
-            "type": "ServiceMonitor",
-            "name": "postgres-primary-monitor",
-            "namespace": "production"
-        },
-        {
-            "type": "Deployment",
-            "name": "postgres-exporter",
-            "namespace": "production"
-        }
-    ],
-    "verification": {
-        "metrics_available": true,
-        "scrape_targets_healthy": true,
-        "dashboard_accessible": true
+    "message": "Monitoring plan deployed successfully",
+    "deployment_result": {
+        "success": true,
+        "executed_instructions": 5,
+        "failed_instructions": 0
     }
 }
 ```
 
-### 5. Dashboard Recommendations
+**Error Responses**:
+```json
+// Deployment failure
+{
+    "detail": "Deployment failed",
+    "error": "kubectl command failed: connection refused",
+    "rollback_available": true
+}
+
+// Prerequisites not met
+{
+    "detail": "Prerequisites check failed",
+    "missing_tools": ["kubectl", "helm"]
+}
+```
+
+### 7. Dashboard and Alerting
 
 #### Get Dashboard Recommendations
 ```http
-GET /api/v1/workflow/{session_id}/dashboards
+POST /recommend_dashboards/{thread_id}
+```
+
+**Request Model**: `recommendDashboardsRequest`
+```json
+{
+    "recommend": true
+}
 ```
 
 **Response**:
 ```json
 {
-    "recommended_dashboards": [
-        {
-            "dashboard_id": "9628",
-            "name": "PostgreSQL Database",
-            "description": "Comprehensive PostgreSQL monitoring with performance metrics",
-            "url": "https://grafana.com/grafana/dashboards/9628",
-            "rating": 4.8,
-            "downloads": 125000,
-            "last_updated": "2024-12-15T00:00:00Z",
-            "compatibility": {
-                "prometheus_version": ">=2.30",
-                "grafana_version": ">=8.0",
-                "azure_managed_prometheus": true
-            },
-            "import_method": "dashboard_id",
-            "required_datasource": "Prometheus",
-            "preview_image": "https://grafana.com/api/dashboards/9628/images/6418/image",
-            "panels": [
-                "Database Overview",
-                "Query Performance", 
-                "Connection Statistics",
-                "Replication Status"
-            ],
-            "tags": ["postgresql", "database", "performance", "monitoring"]
-        }
-    ],
-    "import_instructions": {
-        "grafana_ui": "Grafana → + → Import → Dashboard ID: 9628",
-        "api_endpoint": "/api/v1/dashboard/import",
-        "terraform": "grafana_dashboard resource with dashboard_id"
+    "message": "Dashboard recommendations generated",
+    "recommended_dashboards": {
+        "PostgreSQL Database": 9628,
+        "PostgreSQL Overview": 455,
+        "PostgreSQL Exporter Quickstart": 14114
+    }
+}
+```
+
+#### Get Alerting Rules Recommendations  
+```http
+POST /recommend_alerting_rules/{thread_id}
+```
+
+**Request Model**: `recommendAlertingRulesRequest`
+```json
+{
+    "recommend": true
+}
+```
+
+**Response**:
+```json
+{
+    "message": "Alerting rules recommendations generated",
+    "recommended_alerting_rules": {
+        "rules_content": "groups:\n- name: postgresql\n  rules:\n  - alert: PostgreSQLDown\n    expr: pg_up == 0\n    for: 0m\n    labels:\n      severity: critical",
+        "installation_instructions": "kubectl apply -f postgresql-alerts.yaml"
     }
 }
 ```
@@ -475,153 +422,198 @@ GET /api/v1/workflow/{session_id}/dashboards
 ### Standard Error Response Format
 ```json
 {
-    "error": {
-        "code": "WORKFLOW_NOT_FOUND",
-        "message": "Workflow session not found",
-        "details": {
-            "session_id": "invalid-session-id",
-            "available_sessions": ["550e8400-e29b-41d4-a716-446655440000"]
-        },
-        "timestamp": "2025-01-15T10:30:00Z",
-        "request_id": "req_12345"
-    }
+    "detail": "Error description",
+    "error_code": "SPECIFIC_ERROR_CODE",
+    "timestamp": "2025-01-15T10:30:00Z",
+    "path": "/api/endpoint", 
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-### Error Codes
+### Common HTTP Status Codes
+- **200**: Success
+- **400**: Bad Request (invalid parameters, workflow state issues)
+- **404**: Not Found (workflow not found)
+- **500**: Internal Server Error (system failures, agent errors)
 
-#### Client Errors (4xx)
-- `INVALID_INPUT` - Malformed request data
-- `WORKFLOW_NOT_FOUND` - Session ID does not exist
-- `INVALID_PHASE` - Cannot perform action in current workflow phase
-- `MISSING_PERMISSION` - Insufficient Kubernetes permissions
-- `VALIDATION_ERROR` - Input data failed validation
+### Error Categories
 
-#### Server Errors (5xx)  
-- `AI_AGENT_ERROR` - LLM agent execution failed
-- `KUBERNETES_ERROR` - Cluster connectivity or API error
-- `DEPLOYMENT_ERROR` - Infrastructure deployment failed
-- `INTERNAL_ERROR` - Unexpected system error
-
-## Authentication & Authorization
-
-### API Key Authentication
-```http
-Authorization: Bearer your-api-key-here
-```
-
-### Kubernetes Authentication
-The system uses the configured Kubernetes credentials for cluster access. Ensure proper RBAC permissions are configured.
-
-### Rate Limiting
-- **General API**: 100 requests per minute per IP
-- **Workflow operations**: 10 requests per minute per session
-- **Deployment operations**: 5 requests per minute per session
-
-## SDK and Client Libraries
-
-### Python Client Example
-```python
-import asyncio
-from monitoring_client import MonitoringClient
-
-async def setup_monitoring():
-    client = MonitoringClient(
-        base_url="https://monitoring-automation.your-domain.com/api/v1",
-        api_key="your-api-key"
-    )
-    
-    # Create workflow
-    session = await client.create_workflow({
-        "cluster_config": {"kubeconfig_path": "~/.kube/config"}
-    })
-    
-    # Wait for workload detection
-    await client.wait_for_phase(session.id, "workload-selection")
-    
-    # Get detected workloads
-    workloads = await client.get_workloads(session.id)
-    
-    # Select workloads for monitoring
-    selected = [w for w in workloads if w.monitoring_potential == "high"]
-    await client.advance_workflow(session.id, {"selected_workloads": selected})
-    
-    # Continue through workflow...
-    await client.wait_for_completion(session.id)
-    
-    print(f"Monitoring setup completed for session {session.id}")
-
-# Run the workflow
-asyncio.run(setup_monitoring())
-```
-
-### JavaScript/TypeScript Client
-```typescript
-import { MonitoringClient } from '@your-org/monitoring-client';
-
-const client = new MonitoringClient({
-  baseUrl: 'https://monitoring-automation.your-domain.com/api/v1',
-  apiKey: 'your-api-key'
-});
-
-async function setupMonitoring() {
-  // Create and manage workflow
-  const session = await client.createWorkflow({
-    cluster_config: { kubeconfig_path: '~/.kube/config' }
-  });
-  
-  // Monitor progress
-  const status = await client.getWorkflowStatus(session.session_id);
-  console.log(`Current phase: ${status.phase}`);
-  
-  // Handle workload selection
-  if (status.phase === 'workload-selection') {
-    const workloads = status.data.detected_workloads;
-    const selected = workloads.filter(w => w.monitoring_potential === 'high');
-    
-    await client.advanceWorkflow(session.session_id, {
-      selected_workloads: selected
-    });
-  }
-}
-```
-
-## Webhook Integration
-
-### Workflow Progress Webhooks
-Configure webhooks to receive real-time workflow updates:
-
-```http
-POST /api/v1/webhook/configure
-Content-Type: application/json
-
-{
-    "webhook_url": "https://your-system.com/monitoring-webhook",
-    "events": ["workflow.phase_change", "deployment.completed", "error.occurred"],
-    "secret": "your-webhook-secret",
-    "session_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-### Webhook Payload Example
+#### 1. Workflow State Errors
 ```json
 {
-    "event": "workflow.phase_change",
-    "timestamp": "2025-01-15T10:42:00Z",
-    "session_id": "550e8400-e29b-41d4-a716-446655440000",
-    "data": {
-        "previous_phase": "monitoring-plan-generation",
-        "current_phase": "monitoring-plan-evaluation",
-        "progress_percentage": 50,
-        "estimated_completion": "2025-01-15T10:45:00Z"
-    }
+    "detail": "Workflow not in correct phase",
+    "error_code": "INVALID_WORKFLOW_PHASE",
+    "current_phase": "workload-selection",
+    "required_phase": "monitoring-plan-generation"
 }
 ```
 
-## OpenAPI Specification
+#### 2. Kubernetes Integration Errors
+```json
+{
+    "detail": "Failed to connect to Kubernetes cluster",
+    "error_code": "K8S_CONNECTION_ERROR",
+    "kubeconfig_path": "/path/to/kubeconfig"
+}
+```
 
-The complete OpenAPI 3.0 specification is available at:
-- **Interactive docs**: `/docs` (Swagger UI)
-- **ReDoc**: `/redoc` (ReDoc interface)
-- **JSON spec**: `/openapi.json`
-- **YAML spec**: `/openapi.yaml`
+#### 3. AI Agent Errors
+```json
+{
+    "detail": "Agent execution failed",
+    "error_code": "AGENT_EXECUTION_ERROR", 
+    "agent_type": "plan_generation",
+    "error_details": "OpenAI API timeout"
+}
+```
+
+## Middleware and Logging
+
+### Request Logging Middleware
+```python
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log HTTP requests with meaningful system information."""
+    start_time = time.time()
+    
+    logger.info("HTTP request received", extra={
+        'component': 'api',
+        'operation': 'request_start',
+        'method': request.method,
+        'path': str(request.url.path),
+        'client_ip': request.client.host
+    })
+    
+    response = await call_next(request)
+    
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    logger.info("HTTP request completed", extra={
+        'method': request.method,
+        'path': str(request.url.path),
+        'status_code': response.status_code,
+        'duration_ms': duration_ms
+    })
+    
+    return response
+```
+
+## Workflow Management Implementation
+
+### Async-Safe Workflow Storage
+```python
+# Global workflow storage with thread safety
+_workflows: Dict[str, WorkflowStatus] = {}
+_workflows_lock = asyncio.Lock()
+
+# Graph instance management per workflow
+_workflow_graphs: Dict[str, any] = {}
+_graphs_lock = asyncio.Lock()
+
+async def get_workflow_graph(thread_id: str):
+    """Get or create a graph instance for specific workflow."""
+    async with _graphs_lock:
+        if thread_id not in _workflow_graphs:
+            _workflow_graphs[thread_id] = await asyncio.to_thread(get_graph)
+        return _workflow_graphs[thread_id]
+```
+
+### Graph Execution Pattern
+```python
+# Common pattern for executing workflow steps
+async def execute_workflow_step(thread_id: str, command: Command):
+    workflow_graph = await get_workflow_graph(thread_id)
+    
+    result = await asyncio.to_thread(
+        workflow_graph.invoke,
+        command,
+        status.config
+    )
+    
+    return result
+```
+
+## Integration Examples
+
+### Python Client Integration
+```python
+import requests
+import json
+
+class MonitoringAutomationClient:
+    def __init__(self, base_url: str = "http://localhost:8000"):
+        self.base_url = base_url
+        
+    def start_workflow(self) -> dict:
+        """Start new monitoring workflow."""
+        response = requests.get(f"{self.base_url}/start")
+        return response.json()
+        
+    def select_workloads(self, thread_id: str, workload_keys: list) -> dict:
+        """Select OSS workloads for monitoring."""
+        payload = {"workload_keys": workload_keys}
+        response = requests.post(
+            f"{self.base_url}/select_oss_workloads/{thread_id}",
+            json=payload
+        )
+        return response.json()
+        
+    def generate_plan(self, thread_id: str) -> dict:
+        """Generate monitoring deployment plan."""
+        payload = {"generate": True}
+        response = requests.post(
+            f"{self.base_url}/generate_monitoring_plan/{thread_id}",
+            json=payload
+        )
+        return response.json()
+
+# Usage example
+client = MonitoringAutomationClient()
+
+# Start workflow
+result = client.start_workflow()
+thread_id = result["thread_id"]
+workloads = result["detected_oss_workloads"]
+
+# Select workloads
+client.select_workloads(thread_id, list(workloads.keys())[:1])
+
+# Generate plan
+plan_result = client.generate_plan(thread_id)
+print(plan_result["monitoring_plan"]["markdown_plan"])
+```
+
+### cURL Examples
+```bash
+# Start workflow
+curl -X GET http://localhost:8000/start
+
+# Check status
+curl -X GET http://localhost:8000/status/{thread_id}
+
+# Select workloads
+curl -X POST http://localhost:8000/select_oss_workloads/{thread_id} \
+  -H "Content-Type: application/json" \
+  -d '{"workload_keys": ["postgres-service"]}'
+
+# Generate plan
+curl -X POST http://localhost:8000/generate_monitoring_plan/{thread_id} \
+  -H "Content-Type: application/json" \
+  -d '{"generate": true}'
+```
+
+## Security Considerations
+
+### Input Validation
+- All request models use Pydantic validation
+- Thread ID format validation
+- Workload key validation against detected workloads
+
+### Command Execution Safety
+- Commands are executed through InstructionController with validation
+- Dry-run mode available for testing
+- Command sanitization and shell injection prevention
+
+### Error Information Disclosure
+- Error messages designed to be informative but not expose sensitive data
+- System errors logged separately from user-facing responses
+- Kubernetes configuration details not exposed in API responses

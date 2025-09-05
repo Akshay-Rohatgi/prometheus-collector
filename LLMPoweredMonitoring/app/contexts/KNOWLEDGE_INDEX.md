@@ -1,160 +1,154 @@
-# Knowledge Base Index
+# Knowledge Index
 
-This directory contains comprehensive documentation for the LLM-Powered Monitoring System. Use this index to navigate the knowledge base and understand the system architecture, components, and operational procedures.
+## Context Files Overview
 
-## 📚 Documentation Overview
+This directory contains comprehensive documentation for the LLM-Powered Monitoring System. Each file serves a specific purpose in documenting different aspects of the system, providing complete knowledge for future agents and developers.
 
-### 🏗️ [ARCHITECTURE.md](./ARCHITECTURE.md)
-**High-level system architecture and design patterns**
-- System overview and core philosophy
-- Architecture layers and components
-- Design patterns (agent-based, state machine, microservices)
-- Data flow and integration points
-- Security and scalability considerations
+### Core Architecture and Design
+1. **ARCHITECTURE.md** - Complete system architecture, components, and design patterns
+   - FastAPI application structure
+   - LangGraph workflow orchestration
+   - Agent-based monitoring system design
+   - Azure OpenAI integration architecture
 
-### 🔄 [WORKFLOW_STATES.md](./WORKFLOW_STATES.md)
-**Detailed workflow state machine documentation**
-- Complete phase breakdown (detection → deployment → dashboards)
-- State transitions and data structures
-- Checkpointing and recovery mechanisms
-- Error handling patterns
-- Performance considerations
+### AI and Workflow Management
+2. **AI_AGENTS.md** - Comprehensive AI agent documentation
+   - Agent roles and responsibilities
+   - LangGraph workflow implementation
+   - Tool integration and usage
+   - State management and routing
 
-### 🤖 [AI_AGENTS.md](./AI_AGENTS.md)
-**AI agents and LLM integration guide**
-- Specialized agent types and responsibilities
-- Prompt engineering strategies
-- Tool integration patterns
-- Model selection and token management
-- Error handling and retry logic
+3. **WORKFLOW_STATES.md** - Workflow state management and transitions
+   - State definitions and lifecycle
+   - Transition conditions and routing
+   - Interrupt handling and user interaction
+   - Error handling and recovery
 
-### ☸️ [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md)
-**Kubernetes discovery, analysis, and deployment**
-- Service-centric discovery patterns
-- OSS workload classification algorithms
-- Deployment automation with structured instructions
-- Security, RBAC, and network policies
-- Azure Managed Prometheus integration
+### API and Integration
+4. **API_REFERENCE.md** - Complete API documentation
+   - REST endpoint specifications
+   - Request/response schemas
+   - Authentication and security
+   - Error handling and status codes
 
-### 🔌 [API_REFERENCE.md](./API_REFERENCE.md)
-**Complete REST API documentation**
-- All endpoints with request/response examples
-- Authentication and error handling
-- SDK examples (Python, JavaScript)
-- Webhook integration
-- OpenAPI specification
+5. **KUBERNETES_INTEGRATION.md** - Kubernetes integration guide
+   - Service discovery implementation
+   - Workload detection algorithms
+   - RBAC and security configurations
+   - Resource management patterns
 
-### 🚀 [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
-**Development and production deployment**
-- Local development setup
-- Testing strategies and CI/CD pipelines
-- Container builds and Kubernetes manifests
-- Production considerations and operational procedures
-- Configuration management
+### Deployment and Operations
+6. **DEPLOYMENT_GUIDE.md** - Complete deployment procedures
+   - Environment setup and configuration
+   - Docker containerization
+   - Kubernetes manifest management
+   - Production deployment strategies
 
-## 🎯 Quick Reference
+7. **CONFIGURATION_REFERENCE.md** - Configuration management guide
+   - Environment variable documentation
+   - Model configuration options
+   - Azure service integration settings
+   - Security and authentication configuration
 
-### For Understanding the System
-1. **Start with**: [ARCHITECTURE.md](./ARCHITECTURE.md) for system overview
-2. **Then read**: [WORKFLOW_STATES.md](./WORKFLOW_STATES.md) for process flow
-3. **Deep dive**: [AI_AGENTS.md](./AI_AGENTS.md) for AI implementation details
+### Development and Testing
+8. **TESTING_GUIDE.md** - Comprehensive testing framework
+   - DeepEval integration and custom metrics
+   - AI agent testing procedures
+   - Integration testing strategies
+   - Performance testing and benchmarks
 
-### For Integration
-1. **API Integration**: [API_REFERENCE.md](./API_REFERENCE.md)
-2. **Kubernetes Setup**: [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md)
-3. **Deployment**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+9. **TROUBLESHOOTING.md** - Complete troubleshooting guide
+   - Common issues and solutions
+   - Diagnostic procedures and tools
+   - Performance optimization techniques
+   - System health monitoring
 
-### For Development
-1. **Setup**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) → Development Environment
-2. **Architecture**: [ARCHITECTURE.md](./ARCHITECTURE.md) → Design Patterns
-3. **Testing**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) → Testing Strategy
+### Logging and Monitoring
+10. **LOGGING_README.md** - Logging configuration and best practices
+    - Structured logging implementation
+    - Log levels and message formatting
+    - Centralized logging strategies
+    - Debug and performance monitoring
 
-## 🔍 Component Quick Finder
+### Utilities and Tools
+11. **MARKDOWN_PARSER_DIAGNOSIS.md** - Markdown parsing utilities
+    - Parser implementation details
+    - Error handling and validation
+    - Content extraction algorithms
+    - Tool integration patterns
 
-### Core Components
-- **FastAPI Application**: [API_REFERENCE.md](./API_REFERENCE.md)
-- **Workflow Engine**: [WORKFLOW_STATES.md](./WORKFLOW_STATES.md)
-- **AI Agents**: [AI_AGENTS.md](./AI_AGENTS.md)
-- **K8s Client**: [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md)
+## Quick Navigation Guide
 
-### Key Files Reference
-```
-main.py              → FastAPI entry point
-api/routes.py        → REST API endpoints  
-core/workflow.py     → Workflow state management
-ai/graphs.py         → LangGraph AI workflow
-k8s/client.py        → Kubernetes discovery
-ai/instructions.py   → Deployment automation
-```
+### For New Developers
+**Recommended Reading Order:**
+1. Start with: **ARCHITECTURE.md** - Understand overall system design
+2. Continue with: **AI_AGENTS.md** - Learn AI workflow implementation
+3. Review: **API_REFERENCE.md** - Understand API interactions
+4. Study: **WORKFLOW_STATES.md** - Master state management
+5. Practice with: **TESTING_GUIDE.md** - Learn testing procedures
 
-### Workflow Phases
-1. **workload-detection** → [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md#discovery-patterns)
-2. **workload-selection** → [WORKFLOW_STATES.md](./WORKFLOW_STATES.md#phase-2-workload-selection)
-3. **monitoring-plan-generation** → [AI_AGENTS.md](./AI_AGENTS.md#2-monitoring-plan-generator)
-4. **monitoring-plan-evaluation** → [AI_AGENTS.md](./AI_AGENTS.md#3-plan-evaluator-critic-agent)
-5. **deployment-confirmation** → [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md#deployment-automation)
-6. **dashboard-recommendation** → [AI_AGENTS.md](./AI_AGENTS.md#4-dashboard-recommender)
+### For DevOps Engineers
+**Essential Documents:**
+1. **DEPLOYMENT_GUIDE.md** - Complete deployment procedures
+2. **KUBERNETES_INTEGRATION.md** - K8s configuration and management
+3. **CONFIGURATION_REFERENCE.md** - Environment and service setup
+4. **TROUBLESHOOTING.md** - Operational issue resolution
+5. **LOGGING_README.md** - Monitoring and observability
 
-## 🛠️ Troubleshooting Quick Links
+### For AI/ML Engineers
+**Core Resources:**
+1. **AI_AGENTS.md** - Agent development and workflow design
+2. **TESTING_GUIDE.md** - AI-specific testing and evaluation
+3. **ARCHITECTURE.md** - AI system integration patterns
+4. **WORKFLOW_STATES.md** - State machine and decision logic
+5. **TROUBLESHOOTING.md** - AI agent debugging techniques
 
-### Common Issues
-- **Service Discovery Problems**: [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md#troubleshooting-guide)
-- **AI Agent Failures**: [AI_AGENTS.md](./AI_AGENTS.md#error-handling-and-retry-logic)
-- **Deployment Issues**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#operational-procedures)
-- **API Errors**: [API_REFERENCE.md](./API_REFERENCE.md#error-handling)
+### For API Developers
+**Key References:**
+1. **API_REFERENCE.md** - Complete endpoint documentation
+2. **ARCHITECTURE.md** - API architecture and patterns
+3. **CONFIGURATION_REFERENCE.md** - API configuration options
+4. **TESTING_GUIDE.md** - API testing procedures
+5. **TROUBLESHOOTING.md** - API issue resolution
 
-### Diagnostic Procedures
-- **Workflow State**: [WORKFLOW_STATES.md](./WORKFLOW_STATES.md#recovery-mechanisms)
-- **Kubernetes Connectivity**: [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md#diagnostic-commands)
-- **System Health**: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#health-checks)
+### For Troubleshooting and Support
+**Diagnostic Workflow:**
+1. **TROUBLESHOOTING.md** - Primary troubleshooting resource
+2. **LOGGING_README.md** - Log analysis and interpretation
+3. **CONFIGURATION_REFERENCE.md** - Configuration validation
+4. **KUBERNETES_INTEGRATION.md** - K8s connectivity issues
+5. **API_REFERENCE.md** - API error codes and solutions
 
-## 📋 Implementation Checklists
+## System Overview Summary
 
-### New Environment Setup
-- [ ] Review [ARCHITECTURE.md](./ARCHITECTURE.md) for system understanding
-- [ ] Follow [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for environment setup
-- [ ] Configure Kubernetes access per [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md)
-- [ ] Test API endpoints from [API_REFERENCE.md](./API_REFERENCE.md)
-- [ ] Validate AI agents per [AI_AGENTS.md](./AI_AGENTS.md)
+The LLM-Powered Monitoring System is a sophisticated Azure Kubernetes Service monitoring solution that uses AI agents to:
 
-### Production Deployment
-- [ ] Security review: [ARCHITECTURE.md](./ARCHITECTURE.md#security-considerations)
-- [ ] RBAC setup: [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md#security-and-rbac)
-- [ ] Monitoring setup: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#monitoring-the-monitor)
-- [ ] Backup procedures: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#backup-and-recovery)
-- [ ] Performance tuning: [AI_AGENTS.md](./AI_AGENTS.md#performance-optimization)
+### Core Capabilities
+- **Automatic OSS Workload Detection**: Discovers open-source services in Kubernetes clusters
+- **Intelligent Monitoring Plan Generation**: Creates tailored Prometheus monitoring configurations
+- **Automated Deployment**: Executes monitoring setup using Helm charts and kubectl
+- **Plan Evaluation and Optimization**: AI-driven monitoring plan assessment and improvement
 
-### Adding New Features
-- [ ] Understand workflow: [WORKFLOW_STATES.md](./WORKFLOW_STATES.md)
-- [ ] Review agent patterns: [AI_AGENTS.md](./AI_AGENTS.md)
-- [ ] Check API consistency: [API_REFERENCE.md](./API_REFERENCE.md)
-- [ ] Update deployment: [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
-- [ ] Test integration: [KUBERNETES_INTEGRATION.md](./KUBERNETES_INTEGRATION.md)
+### Technology Stack
+- **Backend**: FastAPI with Python 3.12
+- **AI Orchestration**: LangGraph for workflow management
+- **AI Models**: Azure OpenAI (GPT-4o, GPT-5)
+- **Container Platform**: Kubernetes with Docker
+- **Deployment**: Helm charts and kubectl automation
+- **Testing**: DeepEval framework with custom metrics
+- **Monitoring**: Structured logging with Azure integration
 
-## 💡 Best Practices Summary
+### Key Components
+- **Workflow Engine**: State-based AI agent orchestration
+- **Kubernetes Client**: Service discovery and cluster interaction
+- **AI Agents**: Specialized agents for detection, planning, and evaluation
+- **Deployment Controller**: Automated infrastructure provisioning
+- **API Layer**: RESTful interface for workflow management
 
-### Architecture
-- **Modular design** with clear separation of concerns
-- **Human-in-the-loop** for critical decisions
-- **State machine pattern** for workflow management
-- **Agent-based AI** with specialized responsibilities
+### Security Features
+- **RBAC Integration**: Kubernetes role-based access control
+- **Secret Management**: Azure Key Vault and Kubernetes secrets
+- **API Authentication**: Secure token-based authentication
+- **Network Security**: Namespace isolation and network policies
 
-### Development  
-- **Async-first** for scalability
-- **Comprehensive testing** with mocks and fixtures
-- **Type hints** and validation throughout
-- **Error handling** at every layer
-
-### Operations
-- **Observability** with metrics, logs, and traces
-- **Security** with RBAC and least-privilege
-- **Reliability** with checkpoints and recovery
-- **Performance** with caching and optimization
-
----
-
-**Last Updated**: August 2025  
-**Version**: 1.0.0  
-**Maintainer**: Development Team
-
-For questions or clarifications, refer to the specific documentation files or create an issue in the repository.
+This comprehensive documentation ensures that any future agent or developer can quickly understand, maintain, and extend the LLM-Powered Monitoring System effectively.
