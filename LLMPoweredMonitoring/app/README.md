@@ -118,10 +118,36 @@ tests_print.py           # Print utility testing
 Get the API keys for the models and store them securely.
 
 ### Get the GitHub Token
-1. Create a Github Personal Access Token (PAT) without any permissions.
+1. Create a Github Personal Access Token (PAT) without any permissions. Unauthenticated requests to the Github API are limited to 60 requests per hour.
 2. Store the token securely.
 
-### Deploy to Kubernetes Cluster
+### Deploy with Helm Chart
+
+Install with the local Helm chart. 
+```
+helm install llm-monitoring ./chart/llm-powered-monitoring \
+  --namespace llm-powered-monitoring \
+  --create-namespace \
+  --set secrets.openai.create=true \
+  --set secrets.openai.data.OPENAI_KEY=your_key \
+  --set secrets.openai.data.OPENAI_ENDPOINT=https://your-custom-endpoint.openai.azure.com/ \
+  --set secrets.github.create=true \
+  --set secrets.github.data.GITHUB_TOKEN=your_token
+```
+
+You can run with an empty GitHub token, but you may run into ratelimiting. Unauthenticated requests to the Github API are limited to 60 requests per hour.
+```
+helm install llm-monitoring ./chart/llm-powered-monitoring \
+  --namespace llm-powered-monitoring \
+  --create-namespace \
+  --set secrets.openai.create=true \
+  --set secrets.openai.data.OPENAI_KEY=your_key \
+  --set secrets.openai.data.OPENAI_ENDPOINT=https://your-custom-endpoint.openai.azure.com/ \
+  --set secrets.github.create=true \
+  --set secrets.github.data.GITHUB_TOKEN=""
+```
+
+### Deploy manually
 > Relevant files are located in `app/manifests/prod/`
 
 Create the namespace

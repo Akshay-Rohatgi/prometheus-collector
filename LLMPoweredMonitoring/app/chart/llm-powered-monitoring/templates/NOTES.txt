@@ -1,0 +1,28 @@
+LLM Powered Monitoring has been deployed successfully!
+
+Namespace: {{ .Values.namespace.name }}
+Service: {{ .Values.service.name }} (port {{ .Values.service.port }} -> {{ .Values.service.targetPort }})
+
+Check the deployment status:
+  kubectl get pods -n {{ .Values.namespace.name }}
+
+View application logs:
+  kubectl logs -f deployment/{{ include "llm.fullname" . }} -n {{ .Values.namespace.name }}
+
+{{- if not .Values.secrets.openai.create }}
+
+⚠️  IMPORTANT: The chart expects external secrets to be created.
+Ensure the following secrets exist in the {{ .Values.namespace.name }} namespace:
+- {{ .Values.secrets.openai.name }}
+- {{ .Values.secrets.github.name }}
+
+You can check with:
+  kubectl get secrets -n {{ .Values.namespace.name }}
+{{- end }}
+
+{{- if .Values.service.enabled }}
+
+Access the application:
+  kubectl port-forward service/{{ .Values.service.name }} {{ .Values.service.port }}:{{ .Values.service.targetPort }} -n {{ .Values.namespace.name }}
+  Then open: http://localhost:{{ .Values.service.port }}
+{{- end }}

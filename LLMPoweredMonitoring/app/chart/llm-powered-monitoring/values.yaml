@@ -1,0 +1,89 @@
+namespace:
+  create: true
+  name: llm-powered-monitoring
+
+image:
+  repository: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images
+  tag: llm-powered-monitoring-7
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: llm-powered-monitoring-sa
+
+rbac:
+  create: true
+
+service:
+  enabled: true
+  name: llm-powered-monitoring-service
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+env:
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  LOG_LEVEL: "INFO"
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+probes:
+  liveness:
+    enabled: false
+    path: /
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    enabled: false
+    path: /
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+secrets:
+  openai:
+    create: false
+    name: openai-secrets
+    data: {}
+    # Example:
+    # data:
+    #   RASHMI_AZURE_OPENAI_API_KEY: "..."
+    #   AKSHAY_AZURE_OPENAI_API_KEY: "..."
+    #   OPENAI_KEY: "..."
+  github:
+    create: false
+    name: github-secrets
+    data: {}
+    # Example:
+    # data:
+    #   GITHUB_TOKEN: "..."
+    #   GITHUB_USER: "..."
+
+volumeMounts:
+  - name: openai-secrets
+    mountPath: /app/ai/env
+    readOnly: true
+  - name: github-secrets
+    mountPath: /app/ai/utils/env
+    readOnly: true
+
+volumes:
+  - name: openai-secrets
+    secretName: openai-secrets
+  - name: github-secrets
+    secretName: github-secrets
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
