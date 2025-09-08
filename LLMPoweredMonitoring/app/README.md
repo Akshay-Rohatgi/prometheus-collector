@@ -108,11 +108,12 @@ tests_print.py           # Print utility testing
 ### Create Azure AI Foundry Resources
 1. Deploy the following models, with the following names on the portal: 
 
-| Model Name | Deployment Name |
+| Model Name | Deployment Name  |
 |------------|------------------|
 | GPT-4o     | gpt-4o           |
 | GPT-5      | gpt-5            |
-| o3        | o3               |
+| o3         | o3               |
+| GPT-4.1    | gpt-4.1          |
 
 Get the API keys for the models and store them securely.
 

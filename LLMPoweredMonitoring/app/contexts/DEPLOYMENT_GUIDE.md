@@ -30,20 +30,23 @@ pip install -r requirements.txt
 #### 2. Environment Configuration
 The system requires multiple environment variables. Create appropriate `.env` files:
 
-**AI Configuration**:
+**AI Configuration** (`ai/env/.env`):
 ```bash
 # Azure OpenAI Configuration
-OPENAI_KEY=your-azure-openai-key
+RASHMI_AZURE_OPENAI_API_KEY=your-azure-openai-key
+AKSHAY_AZURE_OPENAI_API_KEY=your-backup-azure-openai-key
+OPENAI_KEY=your-openai-key  # Fallback
 
 # Model Configuration
 AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-12-01-preview
 ```
 
-**GitHub Integration**:
+**GitHub Integration** (`ai/utils/env/.env`):
 ```bash
 # GitHub API Access for Helm Charts
 GITHUB_TOKEN=your-github-token
+GITHUB_USER=your-github-username
 ```
 
 **Application Configuration** (root `.env`):
@@ -174,42 +177,250 @@ docker push your-registry.azurecr.io/llm-powered-monitoring:latest
 # Image: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:llm-powered-monitoring-6
 ```
 
-## Configuration Files
-
-### Application Configuration
-
 ## Kubernetes Deployment
 
-### Production Deployment
-Follow these steps to deploy to a Kubernetes cluster:
-
-#### 1. Create Namespace
-```bash
-kubectl apply -f manifests/prod/namespace.yaml
+### Namespace Setup
+**File**: `manifests/prod/namespace.yaml`
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-powered-monitoring
+  labels:
+    app: llm-powered-monitoring
+    monitoring: enabled
 ```
 
-#### 2. Create Secrets
-```bash
-kubectl create secret generic openai-secrets \
-  --from-literal=OPENAI_KEY='<your-openai-key>' \
-  -n llm-powered-monitoring
-
-kubectl create secret generic github-secrets \
-  --from-literal=GITHUB_TOKEN='<your-github-token>' \
-  -n llm-powered-monitoring
+### Service Account and RBAC
+**File**: `manifests/prod/serviceaccount.yaml`
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: llm-powered-monitoring-sa
+  namespace: llm-powered-monitoring
+  labels:
+    app: llm-powered-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: llm-powered-monitoring-role
+rules:
+- apiGroups: [""]
+  resources: ["services", "pods", "namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["monitoring.coreos.com", "azmonitoring.coreos.com"]
+  resources: ["servicemonitors", "prometheusrules"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: llm-powered-monitoring-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: llm-powered-monitoring-role
+subjects:
+- kind: ServiceAccount
+  name: llm-powered-monitoring-sa
+  namespace: llm-powered-monitoring
 ```
 
-#### 3. Deploy RBAC and Application
-```bash
-kubectl apply -f manifests/prod/serviceaccount.yaml
-kubectl apply -f manifests/prod/deployment.yaml
+### Application Deployment
+**File**: `manifests/prod/deployment.yaml`
+
+```yaml
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  name: llm-powered-monitoring
+  namespace: llm-powered-monitoring
+  labels:
+    app: llm-powered-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-powered-monitoring
+  template:
+    metadata:
+      labels:
+        app: llm-powered-monitoring
+    spec:
+      serviceAccountName: llm-powered-monitoring-sa
+      containers:
+      - name: llm-powered-monitoring
+        image: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images:llm-powered-monitoring-6
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8000"
+        - name: LOG_LEVEL
+          value: "INFO"
+        volumeMounts:
+        - name: openai-secrets
+          mountPath: /app/ai/env
+          readOnly: true
+        - name: github-secrets
+          mountPath: /app/ai/utils/env
+          readOnly: true
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: openai-secrets
+        secret:
+          secretName: openai-secrets
+      - name: github-secrets
+        secret:
+          secretName: github-secrets
 ```
 
-#### 4. Verify Deployment
-```bash
-kubectl get pods -n llm-powered-monitoring
-kubectl logs -f deployment/llm-powered-monitoring -n llm-powered-monitoring
+### Secret Management
+```yaml
+# OpenAI Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-secrets
+  namespace: llm-powered-monitoring
+type: Opaque
+stringData:
+  .env: |
+    RASHMI_AZURE_OPENAI_API_KEY=your-azure-openai-key
+    AKSHAY_AZURE_OPENAI_API_KEY=your-backup-azure-openai-key
+    OPENAI_KEY=your-openai-key
+
+---
+# GitHub Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-secrets
+  namespace: llm-powered-monitoring
+type: Opaque
+stringData:
+  .env: |
+    GITHUB_TOKEN=your-github-token
+    GITHUB_USER=your-github-username
 ```
+
+### Service Configuration
+**File**: `manifests/prod/service.yaml`
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-powered-monitoring
+  namespace: llm-powered-monitoring
+  labels:
+    app: llm-powered-monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-powered-monitoring
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+```
+
+## Deployment Scripts and Management
+
+### Deployment Script
+**File**: `scripts/deploy.sh`
+```bash
+#!/bin/bash
+set -e
+
+NAMESPACE="llm-powered-monitoring"
+KUBECTL_CMD="kubectl"
+
+echo "🚀 Deploying LLM-Powered Monitoring System"
+
+# Create namespace
+echo "📁 Creating namespace..."
+$KUBECTL_CMD apply -f manifests/prod/namespace.yaml
+
+# Create secrets (ensure these exist)
+echo "🔑 Checking secrets..."
+if ! $KUBECTL_CMD get secret openai-secrets -n $NAMESPACE >/dev/null 2>&1; then
+    echo "⚠️  Please create openai-secrets secret manually"
+    exit 1
+fi
+
+if ! $KUBECTL_CMD get secret github-secrets -n $NAMESPACE >/dev/null 2>&1; then
+    echo "⚠️  Please create github-secrets secret manually"
+    exit 1
+fi
+
+# Deploy RBAC
+echo "🔐 Deploying RBAC..."
+$KUBECTL_CMD apply -f manifests/prod/serviceaccount.yaml
+
+# Deploy application
+echo "🚀 Deploying application..."
+$KUBECTL_CMD apply -f manifests/prod/deployment.yaml
+$KUBECTL_CMD apply -f manifests/prod/service.yaml
+
+# Wait for deployment
+echo "⏳ Waiting for deployment..."
+$KUBECTL_CMD wait --for=condition=available --timeout=300s deployment/llm-powered-monitoring -n $NAMESPACE
+
+echo "✅ Deployment completed successfully!"
+echo "📊 Check status: kubectl get pods -n $NAMESPACE"
+echo "📋 View logs: kubectl logs -f deployment/llm-powered-monitoring -n $NAMESPACE"
+```
+
+### Ubuntu Development Container
+**File**: `manage-ubuntu-dev.sh`
+The system includes a development container setup for Ubuntu environments:
+
+```bash
+#!/bin/bash
+# Development container management script
+
+NAMESPACE="monitoring-dev"
+DEPLOYMENT_NAME="ubuntu-dev"
+
+deploy_container() {
+    print_header "Deploying Ubuntu Development Container"
+    
+    kubectl apply -f manifests/dev/namespace.yaml
+    kubectl apply -f manifests/dev/serviceaccount.yaml  
+    kubectl apply -f manifests/dev/ubuntu-deployment.yaml
+    
+    kubectl wait --for=condition=available --timeout=300s deployment/$DEPLOYMENT_NAME -n $NAMESPACE
+}
+
+exec_into_container() {
     print_header "Exec into Ubuntu Container"
     kubectl exec -it deployment/$DEPLOYMENT_NAME -n $NAMESPACE -- /bin/bash
 }
@@ -257,27 +468,20 @@ def setup_logging():
 ### Model Configuration
 **File**: `ai/models.py`
 ```python
-# Azure OpenAI Models - Deploy these with the specified names
-llm_4o = AzureChatOpenAI(
-    azure_deployment="gpt-4o",
+# Azure OpenAI Models
+llm_o3 = AzureChatOpenAI(
+    azure_deployment="o3",
     api_version="2024-12-01-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_key=os.getenv("OPENAI_KEY")
+    azure_endpoint="https://rashmi-openai.openai.azure.com/",
+    api_key=os.getenv("RASHMI_AZURE_OPENAI_API_KEY")
 )
 
 llm_5 = AzureChatOpenAI(
     azure_deployment="gpt-5", 
     api_version="2024-12-01-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_key=os.getenv("OPENAI_KEY"),
+    azure_endpoint="https://t-arohatgi-5211-resource.cognitiveservices.azure.com/",
+    api_key=os.getenv("AKSHAY_AZURE_OPENAI_API_KEY"),
     reasoning_effort="minimal"
-)
-
-llm_o3 = AzureChatOpenAI(
-    azure_deployment="o3",
-    api_version="2024-12-01-preview",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_key=os.getenv("OPENAI_KEY")
 )
 ```
 

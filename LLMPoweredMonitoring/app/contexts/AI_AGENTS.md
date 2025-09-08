@@ -17,7 +17,7 @@ llm_5 = AzureChatOpenAI(azure_deployment="gpt-5")         # Complex generation
 
 ### Model Selection Strategy
 - **GPT-5**: Complex monitoring plan generation with reasoning_effort="minimal"
-- **GPT-4o**: General purpose tasks, evaluations, and tool calling
+- **GPT-4o or GPT-4.1**: General purpose tasks, evaluations, and tool calling
 - **o3**: Advanced reasoning for complex decision making
 - **Temperature settings**: 0.3 for consistent, focused outputs
 

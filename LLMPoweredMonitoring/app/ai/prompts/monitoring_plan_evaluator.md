@@ -11,7 +11,7 @@ Evaluate the provided monitoring deployment plan for a Kubernetes workload and p
 ## Evaluation Criteria:
 1. Correctness:
 - Ensure that the plan correctly installs the necessary exporters and service monitors for the workload. Use existing Helm charts and kubectl commands as a reference.
-- Verify that the plan includes all necessary parameters and configurations for the workload. Use existing Helm charts and values.yaml files as a reference. R
+- Verify that the plan includes all necessary parameters and configurations for the workload. Use existing Helm charts and values.yaml files as a reference.
 - If you do not have enough information to evaluate the plan, you should use https://github.com/prometheus-community/helm-charts/ as a reference for the available exporters and service monitors. You can also use the values.yaml files in the Helm charts to determine the necessary parameters and configurations for the workload. And you can use https://learn.microsoft.com/en-us/azure/azure-monitor/containers/prometheus-kafka-integration as a reference on how to onboard workloads to Azure Managed Prometheus. HOWEVER, remember that every workload is different and the provided references are just examples. You should not blindly copy the values.yaml files or the Helm charts, but rather use them as a reference to determine the necessary parameters and configurations for the workload you are working with.
 - Ensure that sections that should be optional are clearly marked as such. For example if the exporter helm chart installed automatically creates a service monitor, you should mark the step to install the service monitor as optional.
 
