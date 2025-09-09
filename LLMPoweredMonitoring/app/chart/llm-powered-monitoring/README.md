@@ -67,15 +67,14 @@ helm install llm-monitoring ./chart/llm-powered-monitoring \
 ### Complete Installation Example
 
 ```bash
-helm install llm-monitoring ./chart/llm-powered-monitoring 
-  --namespace llm-powered-monitoring 
-  --create-namespace 
-  --set config.models.AZURE_DEPLOYMENT_4O="production-gpt-4o" 
-  --set config.models.AZURE_DEPLOYMENT_5="production-gpt-5" 
-  --set config.parameters.AZURE_TEMPERATURE_4O="0.5" 
-  --set secrets.openai.create=true 
-  --set secrets.openai.data.OPENAI_KEY="your-azure-openai-key" 
-  --set secrets.openai.data.OPENAI_ENDPOINT="https://my-resource.openai.azure.com/"
+helm install llm-monitoring ./chart/llm-powered-monitoring \
+  --namespace llm-powered-monitoring \
+  --create-namespace \
+  --set secrets.openai.create=true \
+  --set secrets.openai.data.OPENAI_KEY=your_key \
+  --set secrets.openai.data.OPENAI_ENDPOINT=https://your-custom-endpoint.openai.azure.com/ \
+  --set secrets.github.create=true \
+  --set secrets.github.data.GITHUB_TOKEN=your_token
 ```
 
 ## Configuration
