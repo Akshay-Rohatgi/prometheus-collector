@@ -123,7 +123,7 @@ Get the API keys for the models and store them securely.
 
 ### Deploy with Helm Chart
 
-Install with the local Helm chart. 
+Basic install
 ```
 helm install llm-monitoring ./chart/llm-powered-monitoring \
   --namespace llm-powered-monitoring \
@@ -135,17 +135,13 @@ helm install llm-monitoring ./chart/llm-powered-monitoring \
   --set secrets.github.data.GITHUB_TOKEN=your_token
 ```
 
-You can run with an empty GitHub token, but you may run into ratelimiting. Unauthenticated requests to the Github API are limited to 60 requests per hour.
+You can run with an empty GitHub token with the below parameters, but you may run into ratelimiting. Unauthenticated requests to the Github API are limited to 60 requests per hour.
 ```
-helm install llm-monitoring ./chart/llm-powered-monitoring \
-  --namespace llm-powered-monitoring \
-  --create-namespace \
-  --set secrets.openai.create=true \
-  --set secrets.openai.data.OPENAI_KEY=your_key \
-  --set secrets.openai.data.OPENAI_ENDPOINT=https://your-custom-endpoint.openai.azure.com/ \
   --set secrets.github.create=true \
   --set secrets.github.data.GITHUB_TOKEN=""
 ```
+
+You can find the full list of settings and further documentation on the Helm chart [here](./chart/llm-powered-monitoring/README.md)
 
 ### Deploy manually
 > Relevant files are located in `app/manifests/prod/`

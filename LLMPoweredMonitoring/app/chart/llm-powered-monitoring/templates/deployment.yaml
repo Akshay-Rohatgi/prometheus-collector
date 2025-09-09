@@ -31,9 +31,19 @@ spec:
         - containerPort: 8000
           name: http
           protocol: TCP
-        {{- if .Values.env }}
         env:
         {{- range $k, $v := .Values.env }}
+        - name: {{ $k }}
+          value: "{{ $v }}"
+        {{- end }}
+        {{- if .Values.config.models }}
+        {{- range $k, $v := .Values.config.models }}
+        - name: {{ $k }}
+          value: "{{ $v }}"
+        {{- end }}
+        {{- end }}
+        {{- if .Values.config.parameters }}
+        {{- range $k, $v := .Values.config.parameters }}
         - name: {{ $k }}
           value: "{{ $v }}"
         {{- end }}

@@ -1,35 +1,34 @@
 from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
-import os
+from .config import AZURE_OPENAI_MODELS, AZURE_API_VERSION
 
 load_dotenv()
-llm_o3 = AzureChatOpenAI(
-    azure_deployment="o3",
-    api_version="2024-12-01-preview",
-    azure_endpoint=os.getenv("OPENAI_ENDPOINT") or  "https://rashmi-openai.openai.azure.com/",
-    api_key=os.getenv("RASHMI_AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-)
 
-llm_4o = AzureChatOpenAI(
-    azure_deployment="gpt-4o",
-    api_version="2024-12-01-preview",
-    temperature=0.3,
-    azure_endpoint=os.getenv("OPENAI_ENDPOINT") or "https://rashmi-openai.openai.azure.com/",
-    api_key=os.getenv("RASHMI_AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-)
+def create_azure_model(model_key: str) -> AzureChatOpenAI:
+    """Create an Azure OpenAI model instance from configuration."""
+    if model_key not in AZURE_OPENAI_MODELS:
+        raise ValueError(f"Model '{model_key}' not found in configuration")
+    
+    config = AZURE_OPENAI_MODELS[model_key]
+    
+    # Base parameters
+    params = {
+        "azure_deployment": config["deployment"],
+        "api_version": AZURE_API_VERSION,
+        "azure_endpoint": config["endpoint"],
+        "api_key": config["api_key"]
+    }
+    
+    # Add optional parameters if they exist
+    if "temperature" in config:
+        params["temperature"] = config["temperature"]
+    if "reasoning_effort" in config:
+        params["reasoning_effort"] = config["reasoning_effort"]
+    
+    return AzureChatOpenAI(**params)
 
-llm_41 = AzureChatOpenAI(
-    azure_deployment="gpt-4.1",
-    api_version="2024-12-01-preview",
-    temperature=0.3,
-    azure_endpoint=os.getenv("OPENAI_ENDPOINT") or "https://rashmi-openai.openai.azure.com/",
-    api_key=os.getenv("RASHMI_AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-)
-
-llm_5 = AzureChatOpenAI(
-    azure_deployment="gpt-5",
-    api_version="2024-12-01-preview",
-    azure_endpoint=os.getenv("OPENAI_ENDPOINT") or "https://t-arohatgi-5211-resource.cognitiveservices.azure.com/",
-    api_key=os.getenv("AKSHAY_AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_KEY"),
-    reasoning_effort="minimal"
-)
+# Create model instances
+llm_o3 = create_azure_model("o3")
+llm_4o = create_azure_model("gpt-4o")
+llm_41 = create_azure_model("gpt-4.1")
+llm_5 = create_azure_model("gpt-5")

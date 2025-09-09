@@ -28,6 +28,20 @@ env:
   PORT: "8000"
   LOG_LEVEL: "INFO"
 
+# Model configuration - Azure OpenAI model deployment names
+config:
+  models:
+    AZURE_DEPLOYMENT_4O: "gpt-4o"
+    AZURE_DEPLOYMENT_5: "gpt-5"
+    AZURE_DEPLOYMENT_O3: "o3"
+    AZURE_DEPLOYMENT_41: "gpt-4.1"
+    AZURE_API_VERSION: "2024-12-01-preview"
+  # Model-specific parameters
+  parameters:
+    AZURE_TEMPERATURE_4O: "0.3"
+    AZURE_TEMPERATURE_41: "0.3"
+    AZURE_REASONING_EFFORT_5: "minimal"
+
 resources:
   requests:
     cpu: 200m
@@ -55,17 +69,16 @@ secrets:
     data: {}
     # Example:
     # data:
-    #   RASHMI_AZURE_OPENAI_API_KEY: "..."
-    #   AKSHAY_AZURE_OPENAI_API_KEY: "..."
-    #   OPENAI_KEY: "..."
+    #   OPENAI_KEY: "your-azure-openai-api-key"
+    #   OPENAI_ENDPOINT: "https://your-resource.openai.azure.com/"
   github:
     create: false
     name: github-secrets
     data: {}
     # Example:
     # data:
-    #   GITHUB_TOKEN: "..."
-    #   GITHUB_USER: "..."
+    #   GITHUB_TOKEN: "your-github-token"
+    #   GITHUB_USER: "your-github-username"
 
 volumeMounts:
   - name: openai-secrets
