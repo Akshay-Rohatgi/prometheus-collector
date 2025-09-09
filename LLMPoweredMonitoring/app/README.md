@@ -94,13 +94,6 @@ Dockerfile               # Container build configuration for deployment
 /scripts                 # Administrative and utility scripts
   __init__.py           # Scripts module initialization
   run_plan_generation_eval.py # DeepEval testing for plan generation
-
-# Test Files (Root Level)
-test_deduplication.py    # Workload deduplication testing
-test_display_only.py     # Display-only mode testing
-test_pretty_names.py     # Output formatting testing
-test_rollback.py         # Deployment rollback testing
-tests_print.py           # Print utility testing
 ```
 
 ## Deployment
