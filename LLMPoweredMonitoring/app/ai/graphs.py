@@ -32,6 +32,7 @@ Evaluate the provided monitoring deployment plan for a Kubernetes workload and p
 
 ### Non-Negotiables
 - **CRITICAL**: The apiVersion for ServiceMonitors and PodMonitors must ALWAYS be "azmonitoring.coreos.com/v1" (NOT "monitoring.coreos.com/v1"). This is Azure-specific and required for Azure Managed Prometheus integration.
+- **CRITICAL**: Helm release names must follow the deterministic pattern: azmon-{exporter}-exporter-{service}-{namespace}. Any deviation from this pattern MUST be rejected.
 - Any NOT required configurations such as RBAC, SASL, TLS should be clearly marked as optional and not included in the main deployment plan. If you suggest these improvements remind the generator agent that it should be placed in an optional or extra steps section.
 
 ### Important Note About apiVersion:
@@ -137,6 +138,7 @@ class Workflow(BaseModel):
     thread_id: str = None
 
     detected_workloads: dict[str, k8s_client.Workload] = None
+    already_monitored_workloads: dict[str, k8s_client.Workload] = None
 
     detected_oss_workloads: dict[str, k8s_client.Workload] = None
     oss_detection_reasoning: str = None
@@ -158,7 +160,7 @@ class Workflow(BaseModel):
     recommended_alerting_rules: AlertingRules = None
 
 def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
-    """Detect workloads in the Kubernetes cluster."""
+    """Detect workloads in the Kubernetes cluster and prune already-monitored ones."""
     start_time = time.time()
     
     logger.info("Starting workload detection", extra={
@@ -174,23 +176,107 @@ def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
             workload.name.lower(): workload for workload in detected_workloads
         }
         
-        # Dump as JSON for debugging
-        # workloads_json = {}
-        # for name, workload in detected_workloads_dict.items():
-        #     workloads_json[name] = {
-        #         "name": workload.name,
-        #         "namespace": workload.namespace,
-        #         "metadata_name": workload.metadata_name,
-        #         "metadata_labels": workload.metadata_labels,
-        #         "service_type": workload.service_type,
-        #         "service_ports": workload.service_ports,
-        #         "service_annotations": workload.service_annotations,
-        #         "is_oss": workload.is_oss,
-        #         "monitoring_config": workload.monitoring_config
-        #     }
-        # import json
-        # with open("workloads.json", "w") as f:
-        #     json.dump(workloads_json, f, indent=2)
+        total_detected = len(detected_workloads_dict)
+        
+        # Check for environment variable to enable/disable pruning
+        enable_pruning = os.getenv("ENABLE_WORKLOAD_PRUNING", "true").lower() == "true"
+        
+        if not enable_pruning:
+            logger.info("Workload pruning disabled via environment variable", extra={
+                'component': 'ai_graphs',
+                'operation': 'detect_workloads',
+                'pruning_enabled': False
+            })
+            duration_ms = round((time.time() - start_time) * 1000, 2)
+            logger.info("Workload detection completed", extra={
+                'component': 'ai_graphs',
+                'operation': 'detect_workloads',
+                'workflow_phase': 'workload-detection',
+                'duration_ms': duration_ms,
+                'workloads_detected': total_detected,
+                'pruning_enabled': False
+            })
+            
+            print_utils.print_workload_list("Detected Workloads", detected_workloads_dict)
+            return {"detected_workloads": detected_workloads_dict, "already_monitored_workloads": {}}
+        
+        # Import helm utilities and prune already-monitored workloads
+        try:
+            from ai.utils.helm_utils import get_release_name_set, is_workload_monitored
+            
+            # Get current Helm releases once for efficiency
+            logger.debug("Fetching current Helm releases for workload pruning")
+            release_names = get_release_name_set()
+            
+            if not release_names:
+                logger.warning("No Helm releases found or helm unavailable, skipping workload pruning", extra={
+                    'component': 'ai_graphs',
+                    'operation': 'detect_workloads',
+                    'helm_available': False
+                })
+                duration_ms = round((time.time() - start_time) * 1000, 2)
+                logger.info("Workload detection completed", extra={
+                    'component': 'ai_graphs',
+                    'operation': 'detect_workloads',
+                    'workflow_phase': 'workload-detection',
+                    'duration_ms': duration_ms,
+                    'workloads_detected': total_detected,
+                    'pruning_enabled': False,
+                    'helm_available': False
+                })
+                
+                print_utils.print_workload_list("Detected Workloads", detected_workloads_dict)
+                return {"detected_workloads": detected_workloads_dict, "already_monitored_workloads": {}}
+            
+            # Separate workloads into monitored and unmonitored
+            already_monitored = {}
+            remaining_workloads = {}
+            
+            for key, workload in detected_workloads_dict.items():
+                if is_workload_monitored(workload.name, workload.namespace, release_names):
+                    already_monitored[key] = workload
+                else:
+                    remaining_workloads[key] = workload
+            
+            # Log pruning results
+            monitored_count = len(already_monitored)
+            remaining_count = len(remaining_workloads)
+            
+            logger.info("Workload pruning completed", extra={
+                'component': 'ai_graphs',
+                'operation': 'detect_workloads_prune',
+                'total_detected': total_detected,
+                'already_monitored': monitored_count,
+                'remaining_unmonitored': remaining_count,
+                'pruning_enabled': True,
+                'helm_releases_found': len(release_names)
+            })
+            
+            if monitored_count > 0:
+                monitored_names = [w.name for w in already_monitored.values()]
+                logger.info(f"Pruned {monitored_count} already-monitored workloads: {monitored_names}", extra={
+                    'component': 'ai_graphs',
+                    'operation': 'detect_workloads_prune',
+                    'monitored_workloads': monitored_names
+                })
+                
+        except ImportError as e:
+            logger.warning(f"Helm utilities not available, skipping workload pruning: {e}", extra={
+                'component': 'ai_graphs',
+                'operation': 'detect_workloads',
+                'error': 'helm_utils_import_error'
+            })
+            remaining_workloads = detected_workloads_dict
+            already_monitored = {}
+            
+        except Exception as e:
+            logger.warning(f"Workload pruning failed, proceeding without pruning: {e}", extra={
+                'component': 'ai_graphs',
+                'operation': 'detect_workloads',
+                'error': 'pruning_error'
+            })
+            remaining_workloads = detected_workloads_dict
+            already_monitored = {}
 
         duration_ms = round((time.time() - start_time) * 1000, 2)
         logger.info("Workload detection completed", extra={
@@ -198,12 +284,22 @@ def detect_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
             'operation': 'detect_workloads',
             'workflow_phase': 'workload-detection',
             'duration_ms': duration_ms,
-            'workloads_detected': len(detected_workloads_dict)
+            'total_detected': total_detected,
+            'workloads_remaining': len(remaining_workloads),
+            'workloads_already_monitored': len(already_monitored)
         })
         
-        print_utils.print_workload_list("Detected Workloads", detected_workloads_dict)
+        # Print remaining workloads (the ones that need monitoring)
+        print_utils.print_workload_list("Detected Workloads (Unmonitored)", remaining_workloads)
         
-        return {"detected_workloads": detected_workloads_dict}
+        # Also print already-monitored workloads if any
+        if already_monitored:
+            print_utils.print_workload_list("Already-Monitored Workloads (Skipped)", already_monitored, "📊")
+        
+        return {
+            "detected_workloads": remaining_workloads,
+            "already_monitored_workloads": already_monitored
+        }
         
     except Exception as e:
         duration_ms = round((time.time() - start_time) * 1000, 2)
@@ -478,9 +574,11 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     # Get the workload name for context
     workload_name = workflow.verified_oss_workload.name if workflow.verified_oss_workload else "Unknown"
     
-    # Derive exporter name from workload name (e.g., "kafka" -> "kafka", "postgres" -> "postgres")
-    # The workload name typically maps directly to the exporter name
-    exporter_name = workload_name.lower()
+    # Generate expected deterministic release name for validation
+    from ai.utils.exporter_naming import create_exporter_release_name, get_exporter_name_for_workload
+    workload = workflow.verified_oss_workload
+    exporter_name = get_exporter_name_for_workload(workload.name)
+    expected_release_name = create_exporter_release_name(exporter_name, workload.name, workload.namespace)
     
     # Create approval tool
     approval_result = {"approved": False, "feedback": "", "issues": []}
@@ -507,6 +605,10 @@ def evaluate_monitoring_deployment_plan(workflow: Workflow) -> dict[str, Monitor
     
     {plan_text}
     {previous_feedback}
+    
+    CRITICAL VALIDATION REQUIREMENT:
+    The plan MUST use this exact Helm release name: {expected_release_name}
+    If the plan uses any other release name, it MUST be rejected with feedback to use the correct deterministic name.
     
     This is evaluation round {feedback.round_count} of {MAX_EVALUATION_ROUNDS}. 
     Provide comprehensive feedback and use the approve_plan tool to make your final decision.

@@ -317,9 +317,15 @@ For each workload you identify as a major OSS project (HIGH confidence), use the
     return analysis_prompt
 
 def generate_monitoring_plan_prompt(workload: k8s.client.Workload) -> str:
+    from .utils.exporter_naming import create_exporter_release_name, get_exporter_name_for_workload
+    
     pretty_name_info = ""
     if hasattr(workload, 'pretty_name') and workload.pretty_name:
         pretty_name_info = f"\n    - Pretty Name: {workload.pretty_name}"
+    
+    # Generate deterministic Helm release name
+    exporter_name = get_exporter_name_for_workload(workload.name)
+    release_name = create_exporter_release_name(exporter_name, workload.name, workload.namespace)
     
     workload_info = f"""
     Workload Information (Service):
@@ -332,10 +338,23 @@ def generate_monitoring_plan_prompt(workload: k8s.client.Workload) -> str:
     - Service Annotations: {workload.service_annotations}
     - Is OSS: {workload.is_oss}
     """
+    
+    deterministic_naming_instruction = f"""
+    
+    CRITICAL: You MUST use this exact Helm release name (no variations allowed):
+    Release Name: {release_name}
+    
+    All helm install commands MUST start with:
+    helm install {release_name} prometheus-community/prometheus-{exporter_name}-exporter \\
+    
+    Do NOT use any other release name or invent variations. This deterministic naming enables 
+    reliable detection of already-monitored workloads.
+    """
 
     return f"""Please generate a comprehensive monitoring deployment plan for the following workload as per your instructions:
 
     {workload_info}
+    {deterministic_naming_instruction}
     """
 
 
