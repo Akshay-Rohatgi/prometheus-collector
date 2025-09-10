@@ -41,6 +41,15 @@ config:
     AZURE_TEMPERATURE_4O: "0.3"
     AZURE_TEMPERATURE_41: "0.3"
     AZURE_REASONING_EFFORT_5: "minimal"
+  # Workflow lifecycle management configuration
+  workflow:
+    maxWorkflows: 7
+    ttlCompleted: 600      # 10 minutes
+    ttlFailed: 900         # 15 minutes  
+    ttlCancelled: 300      # 5 minutes
+    inactiveTtl: 1800      # 30 minutes for idle active workflows
+    cleanupInterval: 60    # 1 minute background cleanup frequency
+    evictionPolicy: "lru"  # "lru" or "reject"
 
 resources:
   requests:

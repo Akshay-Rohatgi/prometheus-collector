@@ -21,6 +21,15 @@ K8S_CONTEXT=cluster-context          # Kubernetes context name (optional)
 # Workflow Configuration
 MAX_EVALUATION_ROUNDS=3              # Maximum plan evaluation iterations
 OSS_WORKLOAD_EMOJI=📦               # Display emoji for OSS workloads
+
+# Workflow Lifecycle Management
+MAX_WORKFLOWS=7                      # Maximum concurrent workflows
+WORKFLOW_TTL_COMPLETED=600           # TTL for completed workflows (seconds)
+WORKFLOW_TTL_FAILED=900              # TTL for failed workflows (seconds) 
+WORKFLOW_TTL_CANCELLED=300           # TTL for cancelled workflows (seconds)
+WORKFLOW_INACTIVE_TTL=1800           # TTL for idle active workflows (seconds)
+WORKFLOW_CLEANUP_INTERVAL=60         # Background cleanup frequency (seconds)
+EVICTION_POLICY=lru                  # Eviction policy: "lru" or "reject"
 ```
 
 ### Azure OpenAI Configuration
@@ -233,6 +242,106 @@ AGENT_CONFIG = {
     }
 }
 ```
+
+## Workflow Lifecycle Management
+
+The system includes comprehensive workflow lifecycle management to prevent memory leaks and ensure optimal performance under sustained usage.
+
+### Configuration Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MAX_WORKFLOWS` | `7` | Maximum number of concurrent workflows before eviction |
+| `WORKFLOW_TTL_COMPLETED` | `600` (10 min) | Time-to-live for completed workflows |
+| `WORKFLOW_TTL_FAILED` | `900` (15 min) | Time-to-live for failed workflows |
+| `WORKFLOW_TTL_CANCELLED` | `300` (5 min) | Time-to-live for cancelled workflows |
+| `WORKFLOW_INACTIVE_TTL` | `1800` (30 min) | Time-to-live for idle active workflows |
+| `WORKFLOW_CLEANUP_INTERVAL` | `60` (1 min) | Background cleanup task frequency |
+| `EVICTION_POLICY` | `lru` | Eviction strategy: `lru` or `reject` |
+
+### Eviction Strategy
+
+The system uses a phased eviction approach when capacity is reached:
+
+1. **TTL-based cleanup**: Remove workflows that have exceeded their phase-specific TTL
+2. **Completed workflows**: Evict completed/cancelled/failed workflows by LRU order  
+3. **Inactive workflows**: Remove inactive non-terminal workflows
+4. **Idle active workflows**: Force-cancel and evict active workflows idle beyond `WORKFLOW_INACTIVE_TTL`
+
+### Monitoring Endpoints
+
+#### `/metrics/workflows`
+Returns comprehensive workflow statistics:
+
+```json
+{
+  "capacity": {
+    "current": 6,
+    "maximum": 7,
+    "utilization_percent": 85.7,
+    "available": 1
+  },
+  "phases": {
+    "monitoring-plan-generation": 12,
+    "completed": 15,
+    "workload-selection": 8,
+    "failed": 2
+  },
+  "activity": {
+    "active": 25,
+    "inactive": 20,
+    "expired": 3
+  },
+  "age_statistics": {
+    "oldest_seconds": 1800,
+    "youngest_seconds": 45,
+    "percentiles": {
+      "p50": 320,
+      "p90": 980,
+      "p95": 1250,
+      "p99": 1690
+    }
+  },
+  "configuration": {
+    "ttl_completed": 600,
+    "ttl_failed": 900,
+    "ttl_cancelled": 300,
+    "inactive_ttl": 1800,
+    "cleanup_interval": 60,
+    "eviction_policy": "lru"
+  },
+  "timestamp": "2025-09-10T14:30:15.123456"
+}
+```
+
+#### Capacity Management
+
+When `EVICTION_POLICY=reject`, the system returns HTTP 429 if no workflows can be safely evicted:
+```json
+{
+  "detail": "Workflow capacity reached; please try again later"
+}
+```
+
+With `EVICTION_POLICY=lru` (default), the system will force-evict the oldest workflow as a last resort.
+
+### Production Recommendations
+
+- **High Traffic**: Increase `MAX_WORKFLOWS` to 50-100
+- **Memory Constrained**: Keep `MAX_WORKFLOWS` at 7 or lower, decrease TTL values
+- **Long-Running Workflows**: Increase `WORKFLOW_INACTIVE_TTL` to 3600s (1 hour)
+- **Monitoring**: Set up alerts on `/metrics/workflows` utilization > 80%
+
+### Application Lifespan
+
+The API uses FastAPI's modern lifespan context instead of deprecated `@app.on_event` hooks. All workflow housekeeping initialization and teardown occur within the lifespan context manager. This provides:
+
+- **Clean startup/shutdown**: Unified lifecycle management in one place
+- **No deprecation warnings**: Uses current FastAPI best practices
+- **Better testing support**: Compatible with modern ASGI tooling
+- **Graceful shutdown**: Proper task cancellation and cleanup
+
+The housekeeping task starts automatically on application startup and is cleanly cancelled during shutdown. No operator intervention is required.
 
 ## Logging Configuration
 

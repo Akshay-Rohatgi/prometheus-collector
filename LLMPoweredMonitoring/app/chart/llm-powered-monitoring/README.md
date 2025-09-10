@@ -168,6 +168,18 @@ The application creates these model instances in [`ai/models.py`](../../ai/model
    )
    ```
 
+### Workflow Lifecycle Management Parameters
+
+| Environment Variable | Helm Parameter | Description | Default |
+|---------------------|----------------|-------------|---------|
+| `MAX_WORKFLOWS` | `config.workflow.maxWorkflows` | Maximum concurrent workflows | `7` |
+| `WORKFLOW_TTL_COMPLETED` | `config.workflow.ttlCompleted` | TTL for completed workflows (seconds) | `600` |
+| `WORKFLOW_TTL_FAILED` | `config.workflow.ttlFailed` | TTL for failed workflows (seconds) | `900` |
+| `WORKFLOW_TTL_CANCELLED` | `config.workflow.ttlCancelled` | TTL for cancelled workflows (seconds) | `300` |
+| `WORKFLOW_INACTIVE_TTL` | `config.workflow.inactiveTtl` | TTL for idle active workflows (seconds) | `1800` |
+| `WORKFLOW_CLEANUP_INTERVAL` | `config.workflow.cleanupInterval` | Background cleanup frequency (seconds) | `60` |
+| `EVICTION_POLICY` | `config.workflow.evictionPolicy` | Eviction policy: `lru` or `reject` | `lru` |
+
 ### General Parameters
 
 | Parameter | Description | Default |
@@ -187,6 +199,38 @@ The application creates these model instances in [`ai/models.py`](../../ai/model
 | `service.port` | Service port | `8000` |
 | `secrets.openai.create` | Create OpenAI secrets via Helm | `false` |
 | `secrets.github.create` | Create GitHub secrets via Helm | `false` |
+
+### Workflow Management
+
+The application now includes comprehensive workflow lifecycle management to prevent memory leaks and ensure optimal performance:
+
+#### Features
+- **Capacity Limits**: Maximum concurrent workflows configurable via `MAX_WORKFLOWS`
+- **TTL-based Cleanup**: Automatic removal of workflows based on phase-specific TTL settings
+- **LRU Eviction**: Least Recently Used eviction when capacity is reached
+- **Background Housekeeping**: Periodic cleanup task for expired workflows
+- **Metrics Endpoint**: `/metrics/workflows` provides comprehensive workflow statistics
+
+#### Eviction Strategy
+1. **Expired workflows** (by TTL) are removed first
+2. **Completed/cancelled/failed** workflows are evicted by LRU order
+3. **Inactive non-terminal** workflows are evicted if needed
+4. **Idle active workflows** exceeding `WORKFLOW_INACTIVE_TTL` are force-cancelled and evicted
+
+#### Monitoring
+Use the `/metrics/workflows` endpoint to monitor:
+- Current workflow count and capacity utilization
+- Phase distribution and activity status  
+- Age statistics and percentiles
+- Configuration parameters
+
+#### Example Configuration
+```bash
+helm install llm-monitoring ./chart/llm-powered-monitoring \
+  --set config.workflow.maxWorkflows=15 \
+  --set config.workflow.ttlCompleted=300 \
+  --set config.workflow.evictionPolicy=reject
+```
 
 ## Upgrading
 

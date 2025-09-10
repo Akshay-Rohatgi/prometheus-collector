@@ -48,6 +48,22 @@ spec:
           value: "{{ $v }}"
         {{- end }}
         {{- end }}
+        {{- if .Values.config.workflow }}
+        - name: MAX_WORKFLOWS
+          value: "{{ .Values.config.workflow.maxWorkflows }}"
+        - name: WORKFLOW_TTL_COMPLETED
+          value: "{{ .Values.config.workflow.ttlCompleted }}"
+        - name: WORKFLOW_TTL_FAILED
+          value: "{{ .Values.config.workflow.ttlFailed }}"
+        - name: WORKFLOW_TTL_CANCELLED
+          value: "{{ .Values.config.workflow.ttlCancelled }}"
+        - name: WORKFLOW_INACTIVE_TTL
+          value: "{{ .Values.config.workflow.inactiveTtl }}"
+        - name: WORKFLOW_CLEANUP_INTERVAL
+          value: "{{ .Values.config.workflow.cleanupInterval }}"
+        - name: EVICTION_POLICY
+          value: "{{ .Values.config.workflow.evictionPolicy }}"
+        {{- end }}
         volumeMounts:
         {{- range .Values.volumeMounts }}
         - name: {{ .name }}
