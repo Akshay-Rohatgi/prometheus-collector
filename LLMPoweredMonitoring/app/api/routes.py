@@ -378,6 +378,7 @@ async def start_workflow():
             # Extract the interrupt payload produced by the graph (already JSON-safe)
             interrupt_payload = result["__interrupt__"][0].value or {}
             detected_workloads_payload = interrupt_payload.get("detected_oss_workloads", {})
+            already_monitored_workloads = interrupt_payload.get("already_monitored_workloads", {})
 
             # Defensive: if values are Pydantic models, normalize; if they are dicts, pass through
             formatted_workloads = {}
@@ -395,6 +396,21 @@ async def start_workflow():
                         # Already structured by the workflow; keep as-is
                         formatted_workloads[key] = val
             
+            formatted_already_monitored_workloads = {}
+            if isinstance(already_monitored_workloads, dict):
+                for key, val in already_monitored_workloads.items():
+                    if hasattr(val, "name"):  # Workload object
+                        formatted_already_monitored_workloads[key] = {
+                            "pretty_name": getattr(val, "pretty_name", key),
+                            "service_name": val.name,
+                            "namespace": val.namespace,
+                            "service_type": val.service_type,
+                            "ports": val.service_ports,
+                        }
+                    elif isinstance(val, dict):
+                        # Already structured by the workflow; keep as-is
+                        formatted_already_monitored_workloads[key] = val
+
             # Log workflow interruption for user selection (system event)
             logger.info("Workflow interrupted for workload selection", extra={
                 'component': 'api',
@@ -407,6 +423,7 @@ async def start_workflow():
             return {
                 "thread_id": thread_id,
                 "detected_oss_workloads": formatted_workloads,
+                "already_monitored_workloads": formatted_already_monitored_workloads
             }
         else:
             # Log workflow error (system event)

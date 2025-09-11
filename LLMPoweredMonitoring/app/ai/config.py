@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Kubernetes configuration
-K8S_CONFIG_PATH = "/mnt/c/Users/t-arohatgi/.kube/config"
+K8S_CONFIG_PATH = ""
 
 # Workflow configuration
 MAX_EVALUATION_ROUNDS = 2

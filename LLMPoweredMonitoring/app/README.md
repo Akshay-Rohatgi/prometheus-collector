@@ -96,6 +96,12 @@ Dockerfile               # Container build configuration for deployment
   run_plan_generation_eval.py # DeepEval testing for plan generation
 ```
 
+## Building
+You can build the docker container with the following command within the `app` directory
+```bash
+docker buildx build --platform linux/amd64 -t llm-powered-monitoring .
+```
+
 ## Deployment
 
 ### Create Azure AI Foundry Resources

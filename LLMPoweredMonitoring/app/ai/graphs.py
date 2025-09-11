@@ -407,8 +407,8 @@ def select_oss_workloads(workflow: Workflow) -> dict[str, k8s_client.Workload]:
             "namespace": workload.namespace,
             "service_type": workload.service_type
         }
-    
-    selected_workload_key = interrupt({"detected_oss_workloads": workload_choices})
+    print("Already monitored workloads:", workflow.already_monitored_workloads)
+    selected_workload_key = interrupt({"detected_oss_workloads": workload_choices, "already_monitored_workloads": workflow.already_monitored_workloads})
 
     if not selected_workload_key:
         logger.warning("No workload selected by user", extra={
