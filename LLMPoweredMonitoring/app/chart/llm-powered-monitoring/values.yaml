@@ -4,7 +4,7 @@ namespace:
 
 image:
   repository: mcr.microsoft.com/azuremonitor/containerinsights/cidev/prometheus-collector/images
-  tag: llm-powered-monitoring-7
+  tag: llm-powered-monitoring-8
   pullPolicy: IfNotPresent
 
 replicaCount: 1
